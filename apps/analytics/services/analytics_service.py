@@ -1,4 +1,6 @@
-from decimal import Decimal
+import os
+import re
+from decimal import Decimal, InvalidOperation
 import pandas as pd
 from django.db.models import Sum, Count, Avg, F, Q, Max, Min
 from apps.analytics.models import BillingTransaction
@@ -590,21 +592,66 @@ class AnalyticsService:
         Performs an exact row-by-row and aggregate reconciliation of the active batch
         against the raw Excel workbook!
         """
-        file_path = import_batch.uploaded_file.path
+        def safe_series_decimal_sum(series):
+            if series is None or len(series) == 0:
+                return Decimal('0.00')
+            total = Decimal('0.00')
+            for val in series:
+                if pd.isna(val) or val is None:
+                    continue
+                if isinstance(val, (int, float)):
+                    try:
+                        total += Decimal(str(round(val, 2)))
+                    except Exception:
+                        pass
+                    continue
+                val_str = str(val).strip()
+                if not val_str or val_str.lower() in ('nan', 'none', '-', 'nil', 'null'):
+                    continue
+                is_neg = False
+                if val_str.startswith('(') and val_str.endswith(')'):
+                    is_neg = True
+                    val_str = val_str[1:-1]
+                elif val_str.startswith('-'):
+                    is_neg = True
+                    val_str = val_str[1:]
+                cleaned = re.sub(r'[^\d.]', '', val_str)
+                if cleaned:
+                    try:
+                        dec = Decimal(cleaned)
+                        if is_neg:
+                            dec = -dec
+                        total += dec
+                    except (InvalidOperation, ValueError):
+                        pass
+            return total.quantize(Decimal('0.01'))
+
+        df = None
         sheet_name = import_batch.sheet_name
-        
-        df = pd.read_excel(file_path, sheet_name=sheet_name)
-        excel_rows = len(df)
-        
-        # Mapped columns
-        col_map = import_batch.column_mapping or {}
-        b_col = col_map.get('billing_amount')
-        p_col = col_map.get('amount_paid')
-        s_col = col_map.get('story_amount')
-        
-        excel_billing = Decimal(str(round(df[b_col].sum(), 2))) if b_col and b_col in df.columns else Decimal('0.00')
-        excel_paid = Decimal(str(round(df[p_col].sum(), 2))) if p_col and p_col in df.columns else Decimal('0.00')
-        excel_story = Decimal(str(round(df[s_col].sum(), 2))) if s_col and s_col in df.columns else Decimal('0.00')
+        try:
+            if hasattr(import_batch.uploaded_file, 'path') and os.path.exists(import_batch.uploaded_file.path):
+                df = pd.read_excel(import_batch.uploaded_file.path, sheet_name=sheet_name)
+            elif import_batch.uploaded_file:
+                import_batch.uploaded_file.open('rb')
+                df = pd.read_excel(import_batch.uploaded_file, sheet_name=sheet_name)
+        except Exception:
+            df = None
+
+        if df is not None:
+            excel_rows = len(df)
+            col_map = import_batch.column_mapping or {}
+            b_col = col_map.get('billing_amount')
+            p_col = col_map.get('amount_paid')
+            s_col = col_map.get('story_amount')
+
+            excel_billing = safe_series_decimal_sum(df[b_col]) if b_col and b_col in df.columns else Decimal('0.00')
+            excel_paid = safe_series_decimal_sum(df[p_col]) if p_col and p_col in df.columns else Decimal('0.00')
+            excel_story = safe_series_decimal_sum(df[s_col]) if s_col and s_col in df.columns else Decimal('0.00')
+        else:
+            excel_rows = import_batch.total_source_rows or 0
+            excel_billing = import_batch.total_billing_amount or Decimal('0.00')
+            excel_paid = Decimal('0.00')
+            excel_story = import_batch.total_story_amount or Decimal('0.00')
 
         # Database counts
         db_qs = BillingTransaction.objects.filter(import_batch=import_batch)

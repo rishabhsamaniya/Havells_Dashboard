@@ -85,6 +85,9 @@ if DB_ENGINE == 'django.db.backends.postgresql' or (DB_NAME and not DB_ENGINE.en
             'PASSWORD': os.getenv('DB_PASSWORD', 'postgres'),
             'HOST': os.getenv('DB_HOST', 'localhost'),
             'PORT': os.getenv('DB_PORT', '5432'),
+            'OPTIONS': {
+                'sslmode': os.getenv('DB_SSLMODE', 'require'),
+            },
         }
     }
 else:

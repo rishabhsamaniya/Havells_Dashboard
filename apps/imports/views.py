@@ -167,7 +167,26 @@ def download_rejected_records(request, batch_id):
 @login_required
 def reconcile_batch_view(request, batch_id):
     batch = get_object_or_404(ImportBatch, id=batch_id)
-    reconcile_data = AnalyticsService.get_source_reconciliation(batch)
+    try:
+        reconcile_data = AnalyticsService.get_source_reconciliation(batch)
+    except Exception as e:
+        messages.error(request, f"Reconciliation encountered a workbook reading issue: {str(e)}")
+        reconcile_data = {
+            'batch': batch,
+            'excel_rows': batch.total_source_rows or 0,
+            'db_rows': batch.successful_records or 0,
+            'diff_rows': 0,
+            'excel_billing': batch.total_billing_amount or Decimal('0.00'),
+            'db_billing': batch.total_billing_amount or Decimal('0.00'),
+            'diff_billing': Decimal('0.00'),
+            'excel_paid': Decimal('0.00'),
+            'db_paid': Decimal('0.00'),
+            'diff_paid': Decimal('0.00'),
+            'excel_story': batch.total_story_amount or Decimal('0.00'),
+            'db_story': batch.total_story_amount or Decimal('0.00'),
+            'diff_story': Decimal('0.00'),
+            'is_perfect_match': False,
+        }
     return render(request, 'imports/reconciliation.html', {
         'batch': batch,
         'reconcile': reconcile_data

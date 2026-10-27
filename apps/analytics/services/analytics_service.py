@@ -946,3 +946,39 @@ class AnalyticsService:
             'category_pnl': category_pnl,
             'rm_pnl': rm_pnl,
         }
+
+    @staticmethod
+    def auto_repair_uncategorized_transactions():
+        """
+        Detects if transactions were saved as Uncategorized due to newline differences
+        and auto-repairs them from their preserved raw_source_data.
+        """
+        uncat_qs = BillingTransaction.objects.filter(standardized_category='Uncategorized')
+        if not uncat_qs.exists():
+            return 0
+
+        from apps.imports.services.excel_service import suggest_standardized_category, clean_alpha
+
+        updated_transactions = []
+        for t in uncat_qs[:3000]:
+            raw_val = None
+            if t.raw_source_data:
+                for k, v in t.raw_source_data.items():
+                    k_norm = clean_alpha(k)
+                    if any(term in k_norm for term in ('dine', 'category', 'experience', 'salon', 'spa')):
+                        if v and str(v).strip() and str(v).lower() != 'nan':
+                            raw_val = str(v).strip()
+                            break
+            if raw_val:
+                std = suggest_standardized_category(raw_val)
+                t.raw_category = raw_val
+                t.standardized_category = std
+                updated_transactions.append(t)
+
+        if updated_transactions:
+            BillingTransaction.objects.bulk_update(
+                updated_transactions,
+                ['raw_category', 'standardized_category'],
+                batch_size=500
+            )
+        return len(updated_transactions)

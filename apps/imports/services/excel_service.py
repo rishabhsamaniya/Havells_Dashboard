@@ -293,13 +293,30 @@ class ExcelImportService:
         import_batch.status = 'PROCESSING'
         import_batch.save()
 
-        # Build column inverted lookup
-        # column_mapping: {canonical_name: excel_column_name}
-        col_lookup = {v: k for k, v in column_mapping.items() if v in df.columns}
-        
+        # Robustly resolve column mapping to actual df columns (handling \r\n vs \n, whitespace, casing)
+        resolved_col_map = {}
+        for canonical, selected_col in column_mapping.items():
+            if not selected_col or selected_col == '__ignore__':
+                continue
+            matched = None
+            for col in df.columns:
+                if col == selected_col or clean_header_name(col) == clean_header_name(selected_col) or clean_alpha(col) == clean_alpha(selected_col):
+                    matched = col
+                    break
+            if matched:
+                resolved_col_map[canonical] = matched
+
+        # If raw_category was not mapped or not resolved, auto-detect from df.columns
+        if 'raw_category' not in resolved_col_map:
+            for col in df.columns:
+                col_norm = clean_alpha(col)
+                if any(clean_alpha(cand) == col_norm or clean_alpha(cand) in col_norm for cand in CANONICAL_FIELD_CANDIDATES['raw_category']):
+                    resolved_col_map['raw_category'] = col
+                    break
+
         # Identify required fields
         required_fields = ['rm', 'dealer_code', 'billing_amount']
-        missing_required = [rf for rf in required_fields if rf not in column_mapping or column_mapping[rf] not in df.columns]
+        missing_required = [rf for rf in required_fields if rf not in resolved_col_map]
         if missing_required:
             import_batch.status = 'FAILED'
             import_batch.error_log = f"Missing required column mappings: {', '.join(missing_required)}"
@@ -349,7 +366,7 @@ class ExcelImportService:
 
                 # Extract mapped fields
                 def get_val(canonical):
-                    col_name = column_mapping.get(canonical)
+                    col_name = resolved_col_map.get(canonical)
                     if col_name and col_name in row_dict and not pd.isna(row_dict[col_name]):
                         return row_dict[col_name]
                     return None
@@ -360,6 +377,13 @@ class ExcelImportService:
                 firm_name_val = str(get_val('firm_name') or '').strip()
                 month_label_val = str(get_val('month_label') or '').strip()
                 raw_cat_val = str(get_val('raw_category') or '').strip()
+                if not raw_cat_val or raw_cat_val.lower() in ('nan', 'none', ''):
+                    for k, v in row_dict.items():
+                        k_norm = clean_alpha(k)
+                        if any(c in k_norm for c in ('dine', 'category', 'experience', 'salon', 'spa')):
+                            if v is not None and not pd.isna(v) and str(v).strip() and str(v).lower() != 'nan':
+                                raw_cat_val = str(v).strip()
+                                break
                 spoc_val = str(get_val('payment_spoc') or '').strip()
 
                 # Filter out blank rows or Excel summary / total footer rows

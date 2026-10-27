@@ -34,6 +34,7 @@ def extract_filters_from_request(request):
 
 @login_required
 def dashboard_view(request):
+    AnalyticsService.auto_repair_uncategorized_transactions()
     filters = extract_filters_from_request(request)
     filter_opts = AnalyticsService.get_filter_options()
     
@@ -162,6 +163,7 @@ def payment_analytics_view(request):
 
 @login_required
 def category_analytics_view(request):
+    AnalyticsService.auto_repair_uncategorized_transactions()
     filters = extract_filters_from_request(request)
     filter_opts = AnalyticsService.get_filter_options()
     qs = AnalyticsService.get_filtered_queryset(filters)

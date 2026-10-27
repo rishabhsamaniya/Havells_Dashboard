@@ -1,0 +1,72 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}Audit Trail & Governance Logs{% endblock %}
+
+{% block content %}
+<div class="d-flex align-items-center justify-content-between mb-3">
+    <div>
+        <h3 class="mb-0 fw-bold">Audit Trail & System Governance</h3>
+        <p class="text-muted small mb-0">Immutable chronological record of file uploads, category normalizations, metric adjustments, and user actions</p>
+    </div>
+</div>
+
+<div class="table-card">
+    <div class="p-3 border-bottom d-flex align-items-center justify-content-between bg-light">
+        <h6 class="mb-0 fw-bold">Chronological Audit Events (Latest 200 Logs)</h6>
+        <span class="text-muted small">Tamper-evident audit trail</span>
+    </div>
+    <div class="table-responsive">
+        <table class="table custom-table">
+            <thead>
+                <tr>
+                    <th>Timestamp</th>
+                    <th>Action</th>
+                    <th>User</th>
+                    <th>Entity Affected</th>
+                    <th>Event Details</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for log in logs %}
+                <tr>
+                    <td class="text-muted small text-nowrap">
+                        <i class="bi bi-clock me-1"></i> {{ log.timestamp|date:"d M Y H:i:s" }}
+                    </td>
+                    <td>
+                        {% if log.action == 'IMPORT' %}
+                        <span class="badge bg-success-subtle text-success border border-success-subtle">Data Import</span>
+                        {% elif log.action == 'NORMALIZE' %}
+                        <span class="badge bg-info-subtle text-info border border-info-subtle">Category Normalized</span>
+                        {% elif log.action == 'METRIC_CHANGE' %}
+                        <span class="badge bg-warning-subtle text-warning border border-warning-subtle">Metric Changed</span>
+                        {% elif log.action == 'REVIEW' %}
+                        <span class="badge bg-primary-subtle text-primary border border-primary-subtle">Quality Review</span>
+                        {% elif log.action == 'EXPORT' %}
+                        <span class="badge bg-secondary-subtle text-secondary border">Report Export</span>
+                        {% elif log.action == 'LOGIN' %}
+                        <span class="badge bg-light text-dark border">User Login</span>
+                        {% else %}
+                        <span class="badge bg-light text-dark border">{{ log.get_action_display }}</span>
+                        {% endif %}
+                    </td>
+                    <td class="fw-semibold">{{ log.user.username|default:"System Engine" }}</td>
+                    <td><code>{{ log.model_name }}{% if log.object_id %} (#{{ log.object_id }}){% endif %}</code></td>
+                    <td class="small" style="max-width: 450px;">
+                        <div class="text-truncate" title="{{ log.details }}">
+                            {% for k, v in log.details.items %}
+                            <span class="badge bg-light text-secondary border me-1">{{ k }}: {{ v }}</span>
+                            {% endfor %}
+                        </div>
+                    </td>
+                </tr>
+                {% empty %}
+                <tr>
+                    <td colspan="5" class="text-center py-4 text-muted">No audit trail records found.</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endblock %}

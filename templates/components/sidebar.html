@@ -1,0 +1,106 @@
+<aside class="sidebar">
+    <div class="sidebar-header">
+        <div class="brand-badge">H</div>
+        <div>
+            <div class="brand-text">Havells MIS</div>
+            <div class="brand-sub">Billing Intelligence</div>
+        </div>
+    </div>
+
+    <div class="sidebar-menu">
+        <div class="nav-section-title">Overview</div>
+        <a href="{% url 'analytics:dashboard' %}" class="sidebar-link {% if request.resolver_match.url_name == 'dashboard' %}active{% endif %}">
+            <i class="bi bi-speedometer2"></i>
+            <span>Executive Dashboard</span>
+        </a>
+
+        <div class="nav-section-title">Data Pipeline</div>
+        <a href="{% url 'imports:upload' %}" class="sidebar-link {% if request.resolver_match.url_name == 'upload' %}active{% endif %}">
+            <i class="bi bi-cloud-arrow-up"></i>
+            <span>Upload Excel</span>
+        </a>
+        <a href="{% url 'imports:history' %}" class="sidebar-link {% if request.resolver_match.url_name == 'history' %}active{% endif %}">
+            <i class="bi bi-clock-history"></i>
+            <span>Import History</span>
+        </a>
+
+        <div class="nav-section-title">Business Analytics</div>
+        <a href="{% url 'analytics:rm' %}" class="sidebar-link {% if request.resolver_match.url_name == 'rm' %}active{% endif %}">
+            <i class="bi bi-people-fill"></i>
+            <span>RM Performance</span>
+        </a>
+        <a href="{% url 'analytics:monthly' %}" class="sidebar-link {% if request.resolver_match.url_name == 'monthly' %}active{% endif %}">
+            <i class="bi bi-calendar3"></i>
+            <span>Monthly Billing</span>
+        </a>
+        <a href="{% url 'analytics:story' %}" class="sidebar-link {% if request.resolver_match.url_name == 'story' %}active{% endif %}">
+            <i class="bi bi-pie-chart-fill"></i>
+            <span>STORY Analysis</span>
+        </a>
+        <a href="{% url 'analytics:payment' %}" class="sidebar-link {% if request.resolver_match.url_name == 'payment' %}active{% endif %}">
+            <i class="bi bi-cash-stack"></i>
+            <span>Payment Reconcile</span>
+        </a>
+        <a href="{% url 'analytics:category' %}" class="sidebar-link {% if request.resolver_match.url_name == 'category' %}active{% endif %}">
+            <i class="bi bi-tags-fill"></i>
+            <span>Categories</span>
+        </a>
+        <a href="{% url 'analytics:spoc' %}" class="sidebar-link {% if request.resolver_match.url_name == 'spoc' %}active{% endif %}">
+            <i class="bi bi-person-check-fill"></i>
+            <span>Payment SPOC</span>
+        </a>
+        <a href="{% url 'analytics:dealers' %}" class="sidebar-link {% if request.resolver_match.url_name == 'dealers' %}active{% endif %}">
+            <i class="bi bi-building"></i>
+            <span>Dealers & Firms</span>
+        </a>
+        <a href="{% url 'analytics:pnl' %}" class="sidebar-link {% if request.resolver_match.url_name == 'pnl' %}active{% endif %}">
+            <i class="bi bi-graph-up-arrow"></i>
+            <span>Profit & Loss (P&L)</span>
+        </a>
+
+        <div class="nav-section-title">Data Quality & Reports</div>
+        <a href="{% url 'quality:issues' %}" class="sidebar-link {% if request.resolver_match.url_name == 'issues' %}active{% endif %}">
+            <i class="bi bi-shield-exclamation"></i>
+            <span class="d-flex align-items-center justify-content-between w-100">
+                Data Quality
+                {% if pending_alerts_count > 0 %}
+                <span class="badge bg-danger rounded-pill px-2 py-1" style="font-size: 0.65rem;">{{ pending_alerts_count }}</span>
+                {% endif %}
+            </span>
+        </a>
+        <a href="{% url 'quality:categories' %}" class="sidebar-link {% if request.resolver_match.url_name == 'categories' %}active{% endif %}">
+            <i class="bi bi-sliders"></i>
+            <span>Category Mapping</span>
+        </a>
+        <a href="{% url 'analytics:transactions' %}" class="sidebar-link {% if request.resolver_match.url_name == 'transactions' %}active{% endif %}">
+            <i class="bi bi-table"></i>
+            <span>Transaction Explorer</span>
+        </a>
+        <a href="{% url 'analytics:export_centre' %}" class="sidebar-link {% if request.resolver_match.url_name == 'export_centre' %}active{% endif %}">
+            <i class="bi bi-file-earmark-spreadsheet"></i>
+            <span>Export & MIS Reports</span>
+        </a>
+
+        <div class="nav-section-title">System & Governance</div>
+        <a href="{% url 'core:audit_logs' %}" class="sidebar-link {% if request.resolver_match.url_name == 'audit_logs' %}active{% endif %}">
+            <i class="bi bi-journal-text"></i>
+            <span>Audit Trail</span>
+        </a>
+        <a href="{% url 'core:settings' %}" class="sidebar-link {% if request.resolver_match.url_name == 'settings' %}active{% endif %}">
+            <i class="bi bi-gear-fill"></i>
+            <span>Settings & Definitions</span>
+        </a>
+    </div>
+
+    <div class="sidebar-footer">
+        <div class="d-flex align-items-center justify-content-between text-muted" style="font-size: 0.75rem;">
+            <div>
+                <i class="bi bi-database me-1"></i>
+                <span>{{ current_fy }}</span>
+            </div>
+            <a href="{% url 'core:logout' %}" class="text-danger text-decoration-none" title="Log Out">
+                <i class="bi bi-box-arrow-right fs-6"></i>
+            </a>
+        </div>
+    </div>
+</aside>

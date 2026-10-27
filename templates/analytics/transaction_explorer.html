@@ -1,0 +1,220 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}Transaction Explorer{% endblock %}
+
+{% block content %}
+<div class="d-flex align-items-center justify-content-between mb-3">
+    <div>
+        <h3 class="mb-0 fw-bold">Transaction Explorer</h3>
+        <p class="text-muted small mb-0">Searchable, paginated line-item ledger with source-row traceability and audit data</p>
+    </div>
+    <div class="d-flex gap-2">
+        <a href="{% url 'analytics:export_csv' %}?{{ request.GET.urlencode }}" class="btn btn-sm btn-outline-secondary">
+            <i class="bi bi-filetype-csv me-1"></i> Export Filtered CSV
+        </a>
+        <a href="{% url 'analytics:export_mis' %}?{{ request.GET.urlencode }}" class="btn btn-sm btn-outline-success">
+            <i class="bi bi-file-earmark-excel me-1"></i> Export Excel Workbook
+        </a>
+    </div>
+</div>
+
+{% include 'components/filter_bar.html' %}
+
+<!-- Explorer Table Card -->
+<div class="table-card">
+    <div class="p-3 border-bottom d-flex align-items-center justify-content-between bg-light">
+        <div class="d-flex align-items-center gap-2">
+            <span class="badge bg-primary text-white">{{ total_count }} Transactions Found</span>
+            <span class="text-muted small">Page {{ page_obj.number }} of {{ page_obj.paginator.num_pages }}</span>
+        </div>
+        <div class="text-muted small">
+            Click any row to inspect original source audit record
+        </div>
+    </div>
+    <div class="table-responsive">
+        <table class="table custom-table table-hover">
+            <thead>
+                <tr>
+                    <th>
+                        <a href="?{% for k,v in active_filters.items %}{{ k }}={{ v }}&{% endfor %}sort=source_row_number&order={% if sort_by == 'source_row_number' and order == 'asc' %}desc{% else %}asc{% endif %}" class="text-decoration-none text-muted">
+                            Row # <i class="bi bi-arrow-down-up small"></i>
+                        </a>
+                    </th>
+                    <th>
+                        <a href="?{% for k,v in active_filters.items %}{{ k }}={{ v }}&{% endfor %}sort=month_label&order={% if sort_by == 'month_label' and order == 'asc' %}desc{% else %}asc{% endif %}" class="text-decoration-none text-muted">
+                            Month <i class="bi bi-arrow-down-up small"></i>
+                        </a>
+                    </th>
+                    <th>Dealer Code</th>
+                    <th>Firm Name</th>
+                    <th>Category</th>
+                    <th>RM</th>
+                    <th>Payment SPOC</th>
+                    <th class="text-end">
+                        <a href="?{% for k,v in active_filters.items %}{{ k }}={{ v }}&{% endfor %}sort=billing_amount&order={% if sort_by == 'billing_amount' and order == 'asc' %}desc{% else %}asc{% endif %}" class="text-decoration-none text-muted">
+                            Billing Amount (₹) <i class="bi bi-arrow-down-up small"></i>
+                        </a>
+                    </th>
+                    <th class="text-end">Amount Paid (₹)</th>
+                    <th class="text-end">
+                        <a href="?{% for k,v in active_filters.items %}{{ k }}={{ v }}&{% endfor %}sort=story_amount&order={% if sort_by == 'story_amount' and order == 'asc' %}desc{% else %}asc{% endif %}" class="text-decoration-none text-muted">
+                            STORY (₹) <i class="bi bi-arrow-down-up small"></i>
+                        </a>
+                    </th>
+                    <th>Status</th>
+                    <th class="text-center">Audit</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for tx in page_obj %}
+                <tr>
+                    <td class="text-muted small">#{{ tx.source_row_number }}</td>
+                    <td class="fw-semibold">{{ tx.month_label }}</td>
+                    <td class="fw-bold">{{ tx.dealer_code }}</td>
+                    <td class="text-truncate" style="max-width: 180px;" title="{{ tx.firm_name }}">{{ tx.firm_name }}</td>
+                    <td>
+                        <span class="badge bg-light text-dark border">
+                            {{ tx.standardized_category }}
+                        </span>
+                    </td>
+                    <td>{{ tx.rm }}</td>
+                    <td>{{ tx.payment_spoc }}</td>
+                    <td class="text-end fw-bold">{{ tx.billing_amount|inr }}</td>
+                    <td class="text-end text-success">{{ tx.amount_paid|inr }}</td>
+                    <td class="text-end fw-semibold text-purple">{{ tx.story_amount|inr }}</td>
+                    <td>
+                        {% if tx.payment_status == 'PAID' %}
+                        <span class="badge-status badge-paid"><i class="bi bi-check-circle"></i> Paid</span>
+                        {% elif tx.payment_status == 'PARTIAL' %}
+                        <span class="badge-status badge-partial"><i class="bi bi-dash-circle"></i> Partial</span>
+                        {% elif tx.payment_status == 'UNPAID' %}
+                        <span class="badge-status badge-unpaid"><i class="bi bi-x-circle"></i> Unpaid</span>
+                        {% else %}
+                        <span class="badge-status badge-overpaid"><i class="bi bi-plus-circle"></i> Overpaid</span>
+                        {% endif %}
+                    </td>
+                    <td class="text-center">
+                        <button type="button" class="btn btn-xs btn-outline-secondary py-0 px-2" data-bs-toggle="modal" data-bs-target="#modalTx{{ tx.id }}" title="View Audit Details">
+                            <i class="bi bi-eye"></i>
+                        </button>
+
+                        <!-- Modal Detail -->
+                        <div class="modal fade" id="modalTx{{ tx.id }}" tabindex="-1" aria-labelledby="modalLabel{{ tx.id }}" aria-hidden="true">
+                            <div class="modal-dialog modal-lg text-start">
+                                <div class="modal-content">
+                                    <div class="modal-header bg-light">
+                                        <h6 class="modal-title fw-bold" id="modalLabel{{ tx.id }}">
+                                            <i class="bi bi-file-earmark-text text-primary me-2"></i>
+                                            Audit Details: Source Row #{{ tx.source_row_number }} (Batch #{{ tx.import_batch_id }})
+                                        </h6>
+                                        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                                    </div>
+                                    <div class="modal-body">
+                                        <div class="row g-2 mb-3">
+                                            <div class="col-md-4">
+                                                <div class="p-2 border rounded bg-light">
+                                                    <span class="text-muted small d-block">Dealer Code / Name:</span>
+                                                    <strong>{{ tx.dealer_code }}</strong> ({{ tx.firm_name }})
+                                                </div>
+                                            </div>
+                                            <div class="col-md-4">
+                                                <div class="p-2 border rounded bg-light">
+                                                    <span class="text-muted small d-block">RM / Payment SPOC:</span>
+                                                    <strong>{{ tx.rm }}</strong> / {{ tx.payment_spoc }}
+                                                </div>
+                                            </div>
+                                            <div class="col-md-4">
+                                                <div class="p-2 border rounded bg-light">
+                                                    <span class="text-muted small d-block">Raw Category:</span>
+                                                    <strong>{{ tx.raw_category }}</strong>
+                                                    <div class="text-muted small">Standardized: {{ tx.standardized_category }}</div>
+                                                </div>
+                                            </div>
+                                        </div>
+
+                                        <div class="p-3 border rounded mb-3 bg-light">
+                                            <div class="row text-center">
+                                                <div class="col-4">
+                                                    <span class="text-muted small d-block">Billing Amount</span>
+                                                    <span class="fs-5 fw-bold text-primary">{{ tx.billing_amount|inr }}</span>
+                                                </div>
+                                                <div class="col-4">
+                                                    <span class="text-muted small d-block">Amount Paid</span>
+                                                    <span class="fs-5 fw-bold text-success">{{ tx.amount_paid|inr }}</span>
+                                                </div>
+                                                <div class="col-4">
+                                                    <span class="text-muted small d-block">Recorded STORY</span>
+                                                    <span class="fs-5 fw-bold text-purple">{{ tx.story_amount|inr }}</span>
+                                                </div>
+                                            </div>
+                                        </div>
+
+                                        <h6 class="fw-bold mb-2">Original Excel Source Cell Values:</h6>
+                                        <div class="table-responsive border rounded" style="max-height: 250px;">
+                                            <table class="table table-sm table-striped mb-0 small">
+                                                <thead>
+                                                    <tr class="table-light">
+                                                        <th>Excel Column Header</th>
+                                                        <th>Original Source Cell Content</th>
+                                                    </tr>
+                                                </thead>
+                                                <tbody>
+                                                    {% for key, val in tx.raw_source_data.items %}
+                                                    <tr>
+                                                        <td class="fw-semibold text-secondary">{{ key }}</td>
+                                                        <td>{{ val|default:"<span class='text-muted'>[Blank]</span>" }}</td>
+                                                    </tr>
+                                                    {% endfor %}
+                                                </tbody>
+                                            </table>
+                                        </div>
+                                    </div>
+                                    <div class="modal-footer bg-light">
+                                        <button type="button" class="btn btn-sm btn-secondary" data-bs-dismiss="modal">Close</button>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </td>
+                </tr>
+                {% empty %}
+                <tr>
+                    <td colspan="12" class="text-center py-4 text-muted">No transactions match your search and filter criteria.</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+
+    <!-- Server-Side Pagination Controls -->
+    {% if page_obj.has_other_pages %}
+    <div class="p-3 border-top d-flex align-items-center justify-content-between bg-light">
+        <span class="text-muted small">
+            Showing {{ page_obj.start_index }} to {{ page_obj.end_index }} of {{ page_obj.paginator.count }} transactions
+        </span>
+        <nav aria-label="Transaction pages">
+            <ul class="pagination pagination-sm mb-0">
+                {% if page_obj.has_previous %}
+                <li class="page-item">
+                    <a class="page-link" href="?{% for k,v in active_filters.items %}{{ k }}={{ v }}&{% endfor %}page={{ page_obj.previous_page_number }}&sort={{ sort_by }}&order={{ order }}">&laquo; Prev</a>
+                </li>
+                {% else %}
+                <li class="page-item disabled"><span class="page-link">&laquo; Prev</span></li>
+                {% endif %}
+
+                <li class="page-item active"><span class="page-link">{{ page_obj.number }}</span></li>
+
+                {% if page_obj.has_next %}
+                <li class="page-item">
+                    <a class="page-link" href="?{% for k,v in active_filters.items %}{{ k }}={{ v }}&{% endfor %}page={{ page_obj.next_page_number }}&sort={{ sort_by }}&order={{ order }}">Next &raquo;</a>
+                </li>
+                {% else %}
+                <li class="page-item disabled"><span class="page-link">Next &raquo;</span></li>
+                {% endif %}
+            </ul>
+        </nav>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}

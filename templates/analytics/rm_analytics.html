@@ -1,0 +1,176 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}RM Performance Analytics{% endblock %}
+
+{% block content %}
+<div class="d-flex align-items-center justify-content-between mb-3">
+    <div>
+        <h3 class="mb-0 fw-bold">Relationship Manager (RM) Performance</h3>
+        <p class="text-muted small mb-0">Team member sales volume, STORY profitability, dealer reach, and target tracking</p>
+    </div>
+    <div class="d-flex gap-2">
+        <a href="{% url 'analytics:export_mis' %}?{{ request.GET.urlencode }}" class="btn btn-sm btn-outline-success">
+            <i class="bi bi-file-earmark-excel me-1"></i> Export RM Report
+        </a>
+    </div>
+</div>
+
+{% include 'components/filter_bar.html' %}
+
+<!-- RM Charts -->
+<div class="row g-3 mb-4">
+    <div class="col-lg-8">
+        <div class="chart-card">
+            <div class="chart-header">
+                <h5 class="chart-title"><i class="bi bi-bar-chart-fill text-primary me-2"></i>RM Billing Amount vs STORY Margin</h5>
+                <span class="badge bg-light text-dark border">Consolidated Comparison</span>
+            </div>
+            <div id="chart-rm-main" style="height: 350px;"></div>
+        </div>
+    </div>
+    <div class="col-lg-4">
+        <div class="chart-card">
+            <div class="chart-header">
+                <h5 class="chart-title"><i class="bi bi-pie-chart-fill text-purple me-2"></i>RM Share of Total Billing</h5>
+            </div>
+            <div id="chart-rm-share" style="height: 350px;"></div>
+        </div>
+    </div>
+</div>
+
+<!-- Detailed RM Table -->
+<div class="table-card">
+    <div class="p-3 border-bottom d-flex align-items-center justify-content-between bg-light">
+        <h6 class="mb-0 fw-bold">RM Performance Metrics & Target Achievements</h6>
+        <span class="text-muted small">Showing {{ rm_list|length }} Relationship Managers</span>
+    </div>
+    <div class="table-responsive">
+        <table class="table custom-table">
+            <thead>
+                <tr>
+                    <th>RM Name</th>
+                    <th class="text-end">Billing Amount</th>
+                    <th class="text-end">Amount Paid</th>
+                    <th class="text-end">STORY Amount</th>
+                    <th class="text-end">STORY %</th>
+                    <th class="text-end">Transactions</th>
+                    <th class="text-end">Unique Dealers</th>
+                    <th class="text-end">Avg Billing / Tx</th>
+                    <th class="text-end">Avg / Dealer</th>
+                    <th class="text-center">Target Achievement</th>
+                    <th>Top Categories Handled</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for r in rm_list %}
+                <tr>
+                    <td class="fw-bold text-primary">
+                        <a href="{% url 'analytics:transactions' %}?rm={{ r.rm }}" class="text-decoration-none">
+                            <i class="bi bi-person-circle me-1"></i> {{ r.rm }}
+                        </a>
+                    </td>
+                    <td class="text-end fw-bold">{{ r.total_billing|inr }}</td>
+                    <td class="text-end text-success">{{ r.total_paid|inr }}</td>
+                    <td class="text-end fw-semibold" style="color: var(--color-purple);">{{ r.total_story|inr }}</td>
+                    <td class="text-end">
+                        <span class="badge bg-light border px-2" style="color: #000000 !important; font-weight: 700;">
+                            {{ r.story_percentage }}%
+                        </span>
+                    </td>
+                    <td class="text-end">{{ r.tx_count }}</td>
+                    <td class="text-end">{{ r.unique_dealers }}</td>
+                    <td class="text-end">{{ r.avg_billing|inr }}</td>
+                    <td class="text-end">{{ r.avg_per_dealer|inr }}</td>
+                    <td class="text-center">
+                        {% if r.achievement_pct %}
+                        <div class="d-flex flex-column align-items-center">
+                            <span class="fw-bold {% if r.achievement_pct >= 100 %}text-success{% else %}text-warning{% endif %}">
+                                {{ r.achievement_pct }}%
+                            </span>
+                            <div class="progress w-75" style="height: 4px;">
+                                <div class="progress-bar {% if r.achievement_pct >= 100 %}bg-success{% else %}bg-warning{% endif %}" role="progressbar" style="width: {{ r.achievement_pct }}%;"></div>
+                            </div>
+                        </div>
+                        {% else %}
+                        <span class="text-muted small">Target Not Set</span>
+                        {% endif %}
+                    </td>
+                    <td>
+                        <div class="d-flex gap-1 flex-wrap">
+                            {% for c in r.category_mix|slice:":3" %}
+                            <span class="badge bg-light text-dark border" style="font-size: 0.7rem;">
+                                {{ c.standardized_category }} ({{ c.cat_count }})
+                            </span>
+                            {% endfor %}
+                        </div>
+                    </td>
+                </tr>
+                {% empty %}
+                <tr>
+                    <td colspan="11" class="text-center py-4 text-muted">No RM records match the selected filters.</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    const rmData = {{ plotly_rm_json|safe }};
+    const rmNames = rmData.map(d => d.rm);
+    const rmBilling = rmData.map(d => d.billing);
+    const rmPaid = rmData.map(d => d.paid);
+    const rmStory = rmData.map(d => d.story);
+
+    const trace1 = {
+        x: rmNames,
+        y: rmBilling,
+        name: 'Billing Amount (₹)',
+        type: 'bar',
+        marker: { color: '#2563EB' }
+    };
+    const trace2 = {
+        x: rmNames,
+        y: rmPaid,
+        name: 'Amount Paid (₹)',
+        type: 'bar',
+        marker: { color: '#10B981' }
+    };
+    const trace3 = {
+        x: rmNames,
+        y: rmStory,
+        name: 'STORY Margin (₹)',
+        type: 'bar',
+        marker: { color: '#8B5CF6' }
+    };
+
+    const layout = {
+        barmode: 'group',
+        margin: { t: 20, r: 20, l: 60, b: 40 },
+        legend: { orientation: 'h', y: 1.15, x: 0 },
+        yaxis: { title: 'Amount (₹)', gridcolor: '#F1F5F9' },
+        plot_bgcolor: '#FFFFFF',
+        paper_bgcolor: '#FFFFFF',
+    };
+    Plotly.newPlot('chart-rm-main', [trace1, trace2, trace3], layout, { responsive: true, displayModeBar: false });
+
+    // Share pie chart
+    const traceShare = {
+        labels: rmNames,
+        values: rmBilling,
+        type: 'pie',
+        marker: { colors: ['#2563EB', '#10B981', '#F59E0B', '#8B5CF6', '#06B6D4'] },
+        textinfo: 'label+percent'
+    };
+    const shareLayout = {
+        margin: { t: 20, r: 20, l: 20, b: 20 },
+        showlegend: false,
+        plot_bgcolor: '#FFFFFF',
+        paper_bgcolor: '#FFFFFF',
+    };
+    Plotly.newPlot('chart-rm-share', [traceShare], shareLayout, { responsive: true, displayModeBar: false });
+</script>
+{% endblock %}

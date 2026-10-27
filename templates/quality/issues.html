@@ -1,0 +1,221 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}Data Quality & Exception Management{% endblock %}
+
+{% block content %}
+<div class="d-flex align-items-center justify-content-between mb-3">
+    <div>
+        <h3 class="mb-0 fw-bold">Data Quality & Exception Management</h3>
+        <p class="text-muted small mb-0">Automated audit exception engine detecting duplicates, missing identifiers, and commercial anomalies</p>
+    </div>
+    <div class="d-flex gap-2">
+        <a href="?export=excel{% if current_severity %}&severity={{ current_severity }}{% endif %}{% if current_status %}&review_status={{ current_status }}{% endif %}" class="btn btn-sm btn-outline-success">
+            <i class="bi bi-file-earmark-excel me-1"></i> Export Exceptions (.xlsx)
+        </a>
+    </div>
+</div>
+
+<!-- Exception Summary KPIs -->
+<div class="row g-3 mb-4">
+    <div class="col-md">
+        <div class="kpi-card">
+            <div class="kpi-title"><span>Total Flagged Issues</span><i class="bi bi-shield text-primary fs-5"></i></div>
+            <div class="kpi-value">{{ stats.total }}</div>
+            <div class="kpi-sub"><span>All logged audit anomalies</span></div>
+        </div>
+    </div>
+    <div class="col-md">
+        <div class="kpi-card danger">
+            <div class="kpi-title"><span>Pending Review</span><i class="bi bi-clock-history text-danger fs-5"></i></div>
+            <div class="kpi-value text-danger">{{ stats.pending }}</div>
+            <div class="kpi-sub"><span>Requires management sign-off</span></div>
+        </div>
+    </div>
+    <div class="col-md">
+        <div class="kpi-card danger">
+            <div class="kpi-title"><span>Critical / High</span><i class="bi bi-exclamation-octagon text-danger fs-5"></i></div>
+            <div class="kpi-value text-danger">{{ stats.critical }}</div>
+            <div class="kpi-sub"><span>Duplicates or missing data</span></div>
+        </div>
+    </div>
+    <div class="col-md">
+        <div class="kpi-card warning">
+            <div class="kpi-title"><span>Duplicate Candidates</span><i class="bi bi-copy text-warning fs-5"></i></div>
+            <div class="kpi-value text-warning">{{ stats.duplicates }}</div>
+            <div class="kpi-sub"><span>Repeated dealer & period billing</span></div>
+        </div>
+    </div>
+    <div class="col-md">
+        <div class="kpi-card info">
+            <div class="kpi-title"><span>Business Exceptions</span><i class="bi bi-briefcase text-info fs-5"></i></div>
+            <div class="kpi-value text-info">{{ stats.exceptions }}</div>
+            <div class="kpi-sub"><span>STORY variances or negative values</span></div>
+        </div>
+    </div>
+</div>
+
+<!-- Filters Bar -->
+<div class="filter-card">
+    <form method="GET" class="row g-2 align-items-center">
+        <div class="col-md-3">
+            <label class="form-label text-muted small fw-semibold mb-1">Severity</label>
+            <select name="severity" class="form-select form-select-sm" onchange="this.form.submit()">
+                <option value="">All Severities</option>
+                <option value="CRITICAL" {% if current_severity == 'CRITICAL' %}selected{% endif %}>Critical</option>
+                <option value="HIGH" {% if current_severity == 'HIGH' %}selected{% endif %}>High</option>
+                <option value="MEDIUM" {% if current_severity == 'MEDIUM' %}selected{% endif %}>Medium</option>
+                <option value="LOW" {% if current_severity == 'LOW' %}selected{% endif %}>Low</option>
+            </select>
+        </div>
+        <div class="col-md-3">
+            <label class="form-label text-muted small fw-semibold mb-1">Issue Type</label>
+            <select name="issue_type" class="form-select form-select-sm" onchange="this.form.submit()">
+                <option value="">All Issue Types</option>
+                <option value="POTENTIAL_DUPLICATE" {% if current_type == 'POTENTIAL_DUPLICATE' %}selected{% endif %}>Potential Duplicate</option>
+                <option value="VALIDATION_ERROR" {% if current_type == 'VALIDATION_ERROR' %}selected{% endif %}>Validation Error</option>
+                <option value="BUSINESS_EXCEPTION" {% if current_type == 'BUSINESS_EXCEPTION' %}selected{% endif %}>Business Exception</option>
+                <option value="WARNING" {% if current_type == 'WARNING' %}selected{% endif %}>Warning / Anomaly</option>
+            </select>
+        </div>
+        <div class="col-md-3">
+            <label class="form-label text-muted small fw-semibold mb-1">Review Status</label>
+            <select name="review_status" class="form-select form-select-sm" onchange="this.form.submit()">
+                <option value="">All Statuses</option>
+                <option value="PENDING" {% if current_status == 'PENDING' %}selected{% endif %}>Pending Review</option>
+                <option value="REVIEWED" {% if current_status == 'REVIEWED' %}selected{% endif %}>Reviewed & Accepted</option>
+                <option value="RESOLVED" {% if current_status == 'RESOLVED' %}selected{% endif %}>Resolved</option>
+                <option value="DISMISSED" {% if current_status == 'DISMISSED' %}selected{% endif %}>Dismissed</option>
+            </select>
+        </div>
+        <div class="col-md-3 d-flex align-items-end">
+            <a href="{% url 'quality:issues' %}" class="btn btn-sm btn-outline-secondary w-100">
+                <i class="bi bi-x-circle me-1"></i> Reset Filters
+            </a>
+        </div>
+    </form>
+</div>
+
+<!-- Issues Table -->
+<div class="table-card">
+    <div class="p-3 border-bottom d-flex align-items-center justify-content-between bg-light">
+        <h6 class="mb-0 fw-bold">Audit Exceptions & Anomaly Records</h6>
+        <span class="text-muted small">Showing up to 250 latest issues</span>
+    </div>
+    <div class="table-responsive">
+        <table class="table custom-table">
+            <thead>
+                <tr>
+                    <th>Issue ID</th>
+                    <th>Row #</th>
+                    <th>Field Name</th>
+                    <th>Severity</th>
+                    <th>Type</th>
+                    <th>Issue Description</th>
+                    <th>Original Value</th>
+                    <th>Status</th>
+                    <th class="text-center">Action</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for issue in issues %}
+                <tr>
+                    <td class="fw-bold">#{{ issue.id }}</td>
+                    <td class="text-muted small">
+                        {% if issue.source_row_number %}
+                        Row #{{ issue.source_row_number }}
+                        {% else %}
+                        -
+                        {% endif %}
+                    </td>
+                    <td class="fw-semibold text-secondary">{{ issue.field_name }}</td>
+                    <td>
+                        {% if issue.severity == 'CRITICAL' %}
+                        <span class="badge bg-danger text-white">Critical</span>
+                        {% elif issue.severity == 'HIGH' %}
+                        <span class="badge bg-danger-subtle text-danger border border-danger-subtle">High</span>
+                        {% elif issue.severity == 'MEDIUM' %}
+                        <span class="badge bg-warning-subtle text-warning border border-warning-subtle">Medium</span>
+                        {% else %}
+                        <span class="badge bg-light text-muted border">Low</span>
+                        {% endif %}
+                    </td>
+                    <td><span class="badge bg-light text-dark border">{{ issue.get_issue_type_display }}</span></td>
+                    <td style="max-width: 320px;">
+                        <div class="text-truncate" title="{{ issue.description }}">{{ issue.description }}</div>
+                        {% if issue.review_notes %}
+                        <div class="text-muted small fst-italic">Note: {{ issue.review_notes }}</div>
+                        {% endif %}
+                    </td>
+                    <td>
+                        <code class="small text-truncate d-inline-block" style="max-width: 140px;">{{ issue.original_value|default:"-" }}</code>
+                    </td>
+                    <td>
+                        {% if issue.review_status == 'PENDING' %}
+                        <span class="badge bg-warning-subtle text-warning border border-warning-subtle">Pending</span>
+                        {% elif issue.review_status == 'REVIEWED' %}
+                        <span class="badge bg-info-subtle text-info border border-info-subtle">Reviewed</span>
+                        {% elif issue.review_status == 'RESOLVED' %}
+                        <span class="badge bg-success-subtle text-success border border-success-subtle">Resolved</span>
+                        {% else %}
+                        <span class="badge bg-secondary-subtle text-secondary border">Dismissed</span>
+                        {% endif %}
+                    </td>
+                    <td class="text-center">
+                        <button type="button" class="btn btn-xs btn-outline-primary py-0 px-2" data-bs-toggle="modal" data-bs-target="#reviewModal{{ issue.id }}" title="Review Issue">
+                            <i class="bi bi-pencil-square"></i> Review
+                        </button>
+
+                        <!-- Review Modal -->
+                        <div class="modal fade" id="reviewModal{{ issue.id }}" tabindex="-1" aria-labelledby="modalLabel{{ issue.id }}" aria-hidden="true">
+                            <div class="modal-dialog text-start">
+                                <div class="modal-content">
+                                    <form method="POST" action="{% url 'quality:review_issue' issue_id=issue.id %}">
+                                        {% csrf_token %}
+                                        <div class="modal-header bg-light">
+                                            <h6 class="modal-title fw-bold" id="modalLabel{{ issue.id }}">
+                                                Review Issue #{{ issue.id }}: {{ issue.field_name }}
+                                            </h6>
+                                            <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                                        </div>
+                                        <div class="modal-body">
+                                            <div class="alert alert-light border small mb-3">
+                                                <strong>Description:</strong> {{ issue.description }}<br>
+                                                <strong>Original Value:</strong> <code>{{ issue.original_value|default:"[Blank]" }}</code>
+                                            </div>
+
+                                            <div class="mb-3">
+                                                <label class="form-label small fw-bold">Update Status:</label>
+                                                <select name="review_status" class="form-select form-select-sm" required>
+                                                    <option value="REVIEWED" {% if issue.review_status == 'REVIEWED' %}selected{% endif %}>Reviewed & Accepted</option>
+                                                    <option value="RESOLVED" {% if issue.review_status == 'RESOLVED' %}selected{% endif %}>Resolved</option>
+                                                    <option value="DISMISSED" {% if issue.review_status == 'DISMISSED' %}selected{% endif %}>Dismissed (False Positive)</option>
+                                                    <option value="PENDING" {% if issue.review_status == 'PENDING' %}selected{% endif %}>Pending Review</option>
+                                                </select>
+                                            </div>
+
+                                            <div class="mb-3">
+                                                <label class="form-label small fw-bold">Reviewer Audit Notes / Justification:</label>
+                                                <textarea name="review_notes" class="form-control form-control-sm" rows="3" placeholder="Explain the rationale for this sign-off...">{{ issue.review_notes }}</textarea>
+                                            </div>
+                                        </div>
+                                        <div class="modal-footer bg-light">
+                                            <button type="button" class="btn btn-sm btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                                            <button type="submit" class="btn btn-sm btn-primary">Save Review</button>
+                                        </div>
+                                    </form>
+                                </div>
+                            </div>
+                        </div>
+                    </td>
+                </tr>
+                {% empty %}
+                <tr>
+                    <td colspan="9" class="text-center py-4 text-muted">No data quality issues match the selected filter criteria.</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endblock %}

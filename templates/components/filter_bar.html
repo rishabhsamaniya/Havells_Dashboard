@@ -1,0 +1,100 @@
+<div class="filter-card">
+    <form method="GET" class="row g-2 align-items-center">
+        <!-- Month Filter -->
+        <div class="col-md-2 col-sm-6">
+            <label class="form-label text-muted small fw-semibold mb-1">Month</label>
+            <select name="month" class="form-select form-select-sm" onchange="this.form.submit()">
+                <option value="">All Months</option>
+                {% for m in filter_opts.months %}
+                <option value="{{ m }}" {% if active_filters.month == m %}selected{% endif %}>{{ m }}</option>
+                {% endfor %}
+            </select>
+        </div>
+
+        <!-- RM Filter -->
+        <div class="col-md-2 col-sm-6">
+            <label class="form-label text-muted small fw-semibold mb-1">RM (Relationship Mgr)</label>
+            <select name="rm" class="form-select form-select-sm" onchange="this.form.submit()">
+                <option value="">All RMs</option>
+                {% for r in filter_opts.rms %}
+                <option value="{{ r }}" {% if active_filters.rm == r %}selected{% endif %}>{{ r }}</option>
+                {% endfor %}
+            </select>
+        </div>
+
+        <!-- Payment SPOC Filter -->
+        <div class="col-md-2 col-sm-6">
+            <label class="form-label text-muted small fw-semibold mb-1">Payment SPOC</label>
+            <select name="spoc" class="form-select form-select-sm" onchange="this.form.submit()">
+                <option value="">All SPOCs</option>
+                {% for s in filter_opts.spocs %}
+                <option value="{{ s }}" {% if active_filters.payment_spoc == s %}selected{% endif %}>{{ s }}</option>
+                {% endfor %}
+            </select>
+        </div>
+
+        <!-- Category Filter -->
+        <div class="col-md-2 col-sm-6">
+            <label class="form-label text-muted small fw-semibold mb-1">Experience Category</label>
+            <select name="category" class="form-select form-select-sm" onchange="this.form.submit()">
+                <option value="">All Categories</option>
+                {% for c in filter_opts.categories %}
+                <option value="{{ c }}" {% if active_filters.category == c %}selected{% endif %}>{{ c }}</option>
+                {% endfor %}
+            </select>
+        </div>
+
+        <!-- Payment Status Filter -->
+        <div class="col-md-2 col-sm-6">
+            <label class="form-label text-muted small fw-semibold mb-1">Payment Status</label>
+            <select name="status" class="form-select form-select-sm" onchange="this.form.submit()">
+                <option value="">All Statuses</option>
+                {% for st in filter_opts.payment_statuses %}
+                <option value="{{ st }}" {% if active_filters.payment_status == st %}selected{% endif %}>{{ st }}</option>
+                {% endfor %}
+            </select>
+        </div>
+
+        <!-- Search & Action Buttons -->
+        <div class="col-md-2 col-sm-12 d-flex align-items-end gap-1">
+            <div class="flex-grow-1">
+                <label class="form-label text-muted small fw-semibold mb-1">Search Dealer/Firm</label>
+                <div class="input-group input-group-sm">
+                    <input type="text" name="search" class="form-control" placeholder="Code / Name" value="{{ active_filters.search|default:'' }}">
+                    <button class="btn btn-primary" type="submit" title="Search"><i class="bi bi-search"></i></button>
+                </div>
+            </div>
+            {% if active_filters.month or active_filters.rm or active_filters.payment_spoc or active_filters.category or active_filters.payment_status or active_filters.search %}
+            <a href="{{ request.path }}" class="btn btn-sm btn-outline-secondary" title="Clear Filters">
+                <i class="bi bi-x-circle"></i>
+            </a>
+            {% endif %}
+        </div>
+    </form>
+
+    <!-- Active Filter Chips -->
+    {% if active_filters.month or active_filters.rm or active_filters.payment_spoc or active_filters.category or active_filters.payment_status or active_filters.search %}
+    <div class="d-flex align-items-center gap-2 flex-wrap mt-2 pt-2 border-top">
+        <span class="text-muted small fw-semibold">Active Filters:</span>
+        {% if active_filters.month %}
+        <span class="filter-chip">Month: {{ active_filters.month }}</span>
+        {% endif %}
+        {% if active_filters.rm %}
+        <span class="filter-chip">RM: {{ active_filters.rm }}</span>
+        {% endif %}
+        {% if active_filters.payment_spoc %}
+        <span class="filter-chip">SPOC: {{ active_filters.payment_spoc }}</span>
+        {% endif %}
+        {% if active_filters.category %}
+        <span class="filter-chip">Category: {{ active_filters.category }}</span>
+        {% endif %}
+        {% if active_filters.payment_status %}
+        <span class="filter-chip">Status: {{ active_filters.payment_status }}</span>
+        {% endif %}
+        {% if active_filters.search %}
+        <span class="filter-chip">Search: "{{ active_filters.search }}"</span>
+        {% endif %}
+        <a href="{{ request.path }}" class="text-danger small text-decoration-none fw-semibold ms-2"><i class="bi bi-trash"></i> Reset All</a>
+    </div>
+    {% endif %}
+</div>

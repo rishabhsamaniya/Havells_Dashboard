@@ -1,0 +1,154 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}Settings & Metric Definitions{% endblock %}
+
+{% block content %}
+<div class="d-flex align-items-center justify-content-between mb-3">
+    <div>
+        <h3 class="mb-0 fw-bold">Settings & Metric Definitions</h3>
+        <p class="text-muted small mb-0">Configure business rules, STORY definitions, and Monthly RM Targets</p>
+    </div>
+</div>
+
+<div class="row g-4 mb-4">
+    <!-- STORY Business Definition Card -->
+    <div class="col-lg-6">
+        <div class="chart-card p-4 h-100">
+            <div class="d-flex align-items-center gap-2 mb-3 border-bottom pb-2">
+                <i class="bi bi-sliders text-purple fs-4"></i>
+                <h5 class="fw-bold mb-0">STORY Margin Business Definition</h5>
+            </div>
+
+            <form method="POST">
+                {% csrf_token %}
+                <input type="hidden" name="action" value="update_story_metric">
+
+                <div class="mb-3">
+                    <label class="form-label small fw-bold">Calculation Formula Type:</label>
+                    <select name="formula_type" class="form-select form-select-sm" onchange="toggleCustomFormula(this.value)">
+                        <option value="SOURCE_COLUMN" {% if metric.formula_type == 'SOURCE_COLUMN' %}selected{% endif %}>
+                            Use Dedicated Source Column As-Is (Recommended Default)
+                        </option>
+                        <option value="BILLING_MINUS_PAID" {% if metric.formula_type == 'BILLING_MINUS_PAID' %}selected{% endif %}>
+                            Strict Calculation: Billing Amount - Amount Paid
+                        </option>
+                        <option value="CUSTOM" {% if metric.formula_type == 'CUSTOM' %}selected{% endif %}>
+                            Custom Configured Formula Expression
+                        </option>
+                    </select>
+                    <div class="form-text small">
+                        Guarantees that STORY is not automatically hardcoded without explicit stakeholder confirmation.
+                    </div>
+                </div>
+
+                <div class="mb-3" id="custom-formula-group" style="{% if metric.formula_type != 'CUSTOM' %}display: none;{% endif %}">
+                    <label class="form-label small fw-bold">Custom Formula Expression:</label>
+                    <input type="text" name="formula_expression" class="form-control form-control-sm" value="{{ metric.formula_expression|default:'' }}" placeholder="e.g. billing_amount - amount_paid">
+                </div>
+
+                <div class="mb-3">
+                    <label class="form-label small fw-bold">Business Policy / Accounting Notes:</label>
+                    <textarea name="notes" class="form-control form-control-sm" rows="3">{{ metric.notes }}</textarea>
+                </div>
+
+                <button type="submit" class="btn btn-sm btn-primary">
+                    <i class="bi bi-check-circle me-1"></i> Save Metric Definition
+                </button>
+            </form>
+        </div>
+    </div>
+
+    <!-- Monthly RM Targets Form -->
+    <div class="col-lg-6">
+        <div class="chart-card p-4 h-100">
+            <div class="d-flex align-items-center gap-2 mb-3 border-bottom pb-2">
+                <i class="bi bi-trophy text-warning fs-4"></i>
+                <h5 class="fw-bold mb-0">Set Monthly RM Performance Target</h5>
+            </div>
+
+            <form method="POST">
+                {% csrf_token %}
+                <input type="hidden" name="action" value="add_target">
+
+                <div class="row g-2 mb-3">
+                    <div class="col-6">
+                        <label class="form-label small fw-bold">Relationship Manager (RM):</label>
+                        <select name="rm_name" class="form-select form-select-sm" required>
+                            {% for r in rms %}
+                            <option value="{{ r }}">{{ r }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="col-6">
+                        <label class="form-label small fw-bold">Target Month:</label>
+                        <select name="month_label" class="form-select form-select-sm" required>
+                            {% for m in months %}
+                            <option value="{{ m }}">{{ m }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                </div>
+
+                <div class="row g-2 mb-3">
+                    <div class="col-6">
+                        <label class="form-label small fw-bold">Billing Target (₹):</label>
+                        <input type="number" step="0.01" name="target_billing" class="form-control form-control-sm" placeholder="e.g. 2500000" required>
+                    </div>
+                    <div class="col-6">
+                        <label class="form-label small fw-bold">STORY Target (₹):</label>
+                        <input type="number" step="0.01" name="target_story" class="form-control form-control-sm" placeholder="e.g. 300000">
+                    </div>
+                </div>
+
+                <button type="submit" class="btn btn-sm btn-outline-warning text-dark">
+                    <i class="bi bi-plus-circle me-1"></i> Save RM Target
+                </button>
+            </form>
+        </div>
+    </div>
+</div>
+
+<!-- Active Targets Table -->
+<div class="table-card">
+    <div class="p-3 border-bottom d-flex align-items-center justify-content-between bg-light">
+        <h6 class="mb-0 fw-bold">Active Monthly RM Targets</h6>
+    </div>
+    <div class="table-responsive">
+        <table class="table custom-table">
+            <thead>
+                <tr>
+                    <th>RM Name</th>
+                    <th>Month Label</th>
+                    <th class="text-end">Billing Target</th>
+                    <th class="text-end">STORY Target</th>
+                    <th>Last Updated</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for t in targets %}
+                <tr>
+                    <td class="fw-bold">{{ t.rm_name }}</td>
+                    <td><span class="badge bg-light text-dark border">{{ t.month_label }}</span></td>
+                    <td class="text-end fw-bold text-primary">{{ t.target_billing|inr }}</td>
+                    <td class="text-end fw-semibold text-purple">{{ t.target_story|inr }}</td>
+                    <td class="text-muted small">{{ t.updated_at|date:"d M Y H:i" }}</td>
+                </tr>
+                {% empty %}
+                <tr>
+                    <td colspan="5" class="text-center py-4 text-muted">No specific RM targets configured yet.</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    function toggleCustomFormula(val) {
+        document.getElementById('custom-formula-group').style.display = (val === 'CUSTOM') ? 'block' : 'none';
+    }
+</script>
+{% endblock %}

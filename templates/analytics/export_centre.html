@@ -1,0 +1,140 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}Export & MIS Report Centre{% endblock %}
+
+{% block content %}
+<div class="d-flex align-items-center justify-content-between mb-3">
+    <div>
+        <h3 class="mb-0 fw-bold">Export & Automated MIS Report Centre</h3>
+        <p class="text-muted small mb-0">Generate professional, management-ready Excel workbooks, audits, and CSV reports</p>
+    </div>
+</div>
+
+{% include 'components/filter_bar.html' %}
+
+<div class="row g-4">
+    <!-- Consolidated Multi-Sheet MIS Workbook -->
+    <div class="col-lg-6">
+        <div class="chart-card h-100 p-4 border-primary">
+            <div class="d-flex align-items-center gap-3 mb-3">
+                <div class="rounded-circle bg-primary-subtle text-primary p-3">
+                    <i class="bi bi-file-earmark-spreadsheet-fill fs-2"></i>
+                </div>
+                <div>
+                    <h5 class="fw-bold mb-1">Consolidated Executive MIS Workbook</h5>
+                    <p class="text-muted small mb-0">Full multi-tab management workbook formatted with currency styling</p>
+                </div>
+            </div>
+
+            <div class="border rounded p-3 mb-3 bg-light small">
+                <h6 class="fw-bold mb-2">Workbook Structure:</h6>
+                <ul class="mb-0 ps-3 text-secondary">
+                    <li><strong>Tab 1:</strong> Executive Summary (Core KPIs, Highlights, Notes)</li>
+                    <li><strong>Tab 2:</strong> RM Performance (Billing, STORY, Volumes, Dealer count)</li>
+                    <li><strong>Tab 3:</strong> Monthly Trends (MoM Growth, Monthly distributions)</li>
+                    <li><strong>Tab 4:</strong> STORY Analysis (Positive/Negative margin breakdowns)</li>
+                    <li><strong>Tab 5:</strong> Experience Category Breakdown (Dine-out, Salon, Spa, etc.)</li>
+                    <li><strong>Tab 6:</strong> Payment SPOC Workload & Balances</li>
+                    <li><strong>Tab 7:</strong> Detailed Filtered Transactions (Audit-ready)</li>
+                </ul>
+            </div>
+
+            <div class="d-flex align-items-center justify-content-between mt-auto">
+                <span class="text-muted small">Target Population: <strong>{{ kpis.total_records }}</strong> txns</span>
+                <a href="{% url 'analytics:export_mis' %}?{{ request.GET.urlencode }}" class="btn btn-primary px-4 shadow-sm">
+                    <i class="bi bi-download me-1"></i> Download Multi-Tab Excel (.xlsx)
+                </a>
+            </div>
+        </div>
+    </div>
+
+    <!-- Filtered Raw CSV Export -->
+    <div class="col-lg-6">
+        <div class="chart-card h-100 p-4">
+            <div class="d-flex align-items-center gap-3 mb-3">
+                <div class="rounded-circle bg-success-subtle text-success p-3">
+                    <i class="bi bi-filetype-csv fs-2"></i>
+                </div>
+                <div>
+                    <h5 class="fw-bold mb-1">Filtered Raw Transactions CSV</h5>
+                    <p class="text-muted small mb-0">Flat ledger export compatible with external BI, PowerBI, or SQL tools</p>
+                </div>
+            </div>
+
+            <div class="border rounded p-3 mb-3 bg-light small">
+                <h6 class="fw-bold mb-2">Export Specifications:</h6>
+                <ul class="mb-0 ps-3 text-secondary">
+                    <li>Current active filters applied (Month, RM, Category, Status)</li>
+                    <li>Includes Source Row Numbers for cross-referencing original Excel</li>
+                    <li>Direct column headers: Dealer Code, Firm Name, RM, SPOC, Billing, STORY</li>
+                    <li>Clean UTF-8 CSV formatting</li>
+                </ul>
+            </div>
+
+            <div class="d-flex align-items-center justify-content-between mt-auto">
+                <span class="text-muted small">Transactions: <strong>{{ kpis.total_records }}</strong></span>
+                <a href="{% url 'analytics:export_csv' %}?{{ request.GET.urlencode }}" class="btn btn-outline-success px-4 shadow-sm">
+                    <i class="bi bi-download me-1"></i> Download CSV (.csv)
+                </a>
+            </div>
+        </div>
+    </div>
+
+    <!-- Data Quality Exceptions Report -->
+    <div class="col-lg-6">
+        <div class="chart-card h-100 p-4 border-warning">
+            <div class="d-flex align-items-center gap-3 mb-3">
+                <div class="rounded-circle bg-warning-subtle text-warning p-3">
+                    <i class="bi bi-shield-exclamation fs-2"></i>
+                </div>
+                <div>
+                    <h5 class="fw-bold mb-1">Data Quality & Exception Audit Report</h5>
+                    <p class="text-muted small mb-0">Audit spreadsheet of all flagged anomalies, duplicates, and commercial exceptions</p>
+                </div>
+            </div>
+
+            <p class="small text-secondary mb-3">
+                Exports all validation issues, row numbers, original cell contents, severity ratings, and management review comments for stakeholder sign-off.
+            </p>
+
+            <div class="d-flex align-items-center justify-content-between mt-auto">
+                <span class="text-muted small">Exceptions Logged: <strong>{{ kpis.quality_issues_count }}</strong></span>
+                <a href="{% url 'quality:issues' %}?export=excel" class="btn btn-outline-warning text-dark px-4 shadow-sm">
+                    <i class="bi bi-download me-1"></i> Download Exceptions Excel
+                </a>
+            </div>
+        </div>
+    </div>
+
+    <!-- Source Reconciliation Workbook -->
+    <div class="col-lg-6">
+        <div class="chart-card h-100 p-4">
+            <div class="d-flex align-items-center gap-3 mb-3">
+                <div class="rounded-circle bg-info-subtle text-info p-3">
+                    <i class="bi bi-patch-check fs-2"></i>
+                </div>
+                <div>
+                    <h5 class="fw-bold mb-1">Source Sheet Reconciliation</h5>
+                    <p class="text-muted small mb-0">Verification report comparing raw file aggregates vs system database</p>
+                </div>
+            </div>
+
+            <p class="small text-secondary mb-3">
+                Provides mathematical proof of zero variance, comparing raw Excel sheet totals against active imported database records down to the exact paisa.
+            </p>
+
+            <div class="d-flex align-items-center justify-content-between mt-auto">
+                {% if latest_batch %}
+                <span class="text-muted small">Batch: #{{ latest_batch.id }} ({{ latest_batch.file_name }})</span>
+                <a href="{% url 'imports:reconcile' batch_id=latest_batch.id %}" class="btn btn-outline-info px-4 shadow-sm">
+                    <i class="bi bi-search me-1"></i> View Reconciliation
+                </a>
+                {% else %}
+                <span class="text-muted small">No batches available</span>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

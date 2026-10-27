@@ -1,0 +1,98 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}Import History & Batch Audits{% endblock %}
+
+{% block content %}
+<div class="d-flex align-items-center justify-content-between mb-3">
+    <div>
+        <h3 class="mb-0 fw-bold">Import History & Ingestion Audits</h3>
+        <p class="text-muted small mb-0">Complete audit log of uploaded workbooks, SHA-256 signatures, row counts, and financial totals</p>
+    </div>
+    <a href="{% url 'imports:upload' %}" class="btn btn-sm btn-primary">
+        <i class="bi bi-cloud-arrow-up me-1"></i> New Upload
+    </a>
+</div>
+
+<div class="table-card">
+    <div class="p-3 border-bottom d-flex align-items-center justify-content-between bg-light">
+        <h6 class="mb-0 fw-bold">All Uploaded Batches</h6>
+        <span class="text-muted small">Total {{ batches|length }} Batches</span>
+    </div>
+    <div class="table-responsive">
+        <table class="table custom-table">
+            <thead>
+                <tr>
+                    <th>Batch ID</th>
+                    <th>File Name</th>
+                    <th>Sheet</th>
+                    <th>Uploaded At</th>
+                    <th>User</th>
+                    <th class="text-end">Total Rows</th>
+                    <th class="text-end">Valid Records</th>
+                    <th class="text-end">Rejected</th>
+                    <th class="text-end">Duplicates</th>
+                    <th class="text-end">Total Billing</th>
+                    <th class="text-end">Total STORY</th>
+                    <th>Status</th>
+                    <th class="text-center">Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for b in batches %}
+                <tr>
+                    <td class="fw-bold">#{{ b.id }}</td>
+                    <td>
+                        <div class="fw-semibold text-truncate" style="max-width: 200px;" title="{{ b.file_name }}">{{ b.file_name }}</div>
+                        <div class="text-muted small text-truncate" style="max-width: 150px;" title="{{ b.file_hash }}">SHA: {{ b.file_hash|slice:":12" }}...</div>
+                    </td>
+                    <td><span class="badge bg-light text-dark border">{{ b.sheet_name }}</span></td>
+                    <td class="text-muted small">{{ b.uploaded_at|date:"d M Y H:i" }}</td>
+                    <td>{{ b.uploaded_by.username|default:"System" }}</td>
+                    <td class="text-end">{{ b.total_source_rows }}</td>
+                    <td class="text-end text-success fw-bold">{{ b.successful_records }}</td>
+                    <td class="text-end">
+                        {% if b.rejected_records > 0 %}
+                        <a href="{% url 'imports:rejected' batch_id=b.id %}" class="badge bg-danger-subtle text-danger border border-danger-subtle text-decoration-none">
+                            {{ b.rejected_records }} <i class="bi bi-download"></i>
+                        </a>
+                        {% else %}
+                        <span class="text-muted">0</span>
+                        {% endif %}
+                    </td>
+                    <td class="text-end">
+                        {% if b.duplicate_records > 0 %}
+                        <span class="badge bg-warning-subtle text-warning border border-warning-subtle">{{ b.duplicate_records }}</span>
+                        {% else %}
+                        <span class="text-muted">0</span>
+                        {% endif %}
+                    </td>
+                    <td class="text-end fw-bold">{{ b.total_billing_amount|inr }}</td>
+                    <td class="text-end text-purple fw-semibold">{{ b.total_story_amount|inr }}</td>
+                    <td>
+                        {% if b.status == 'COMPLETED' %}
+                        <span class="badge bg-success-subtle text-success border border-success-subtle">Completed</span>
+                        {% elif b.status == 'PROCESSING' %}
+                        <span class="badge bg-warning-subtle text-warning border border-warning-subtle">Processing</span>
+                        {% elif b.status == 'REPLACED' %}
+                        <span class="badge bg-secondary-subtle text-secondary border">Replaced</span>
+                        {% else %}
+                        <span class="badge bg-danger-subtle text-danger border border-danger-subtle">{{ b.status }}</span>
+                        {% endif %}
+                    </td>
+                    <td class="text-center">
+                        <a href="{% url 'imports:reconcile' batch_id=b.id %}" class="btn btn-xs btn-outline-primary py-0 px-2" title="Source Reconciliation">
+                            <i class="bi bi-patch-check"></i> Reconcile
+                        </a>
+                    </td>
+                </tr>
+                {% empty %}
+                <tr>
+                    <td colspan="13" class="text-center py-4 text-muted">No import history found.</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endblock %}

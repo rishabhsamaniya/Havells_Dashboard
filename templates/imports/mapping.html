@@ -1,0 +1,222 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}Worksheet & Column Mapping{% endblock %}
+
+{% block content %}
+<div class="d-flex align-items-center justify-content-between mb-3">
+    <div>
+        <h3 class="mb-0 fw-bold">Worksheet Discovery & Column Mapping</h3>
+        <p class="text-muted small mb-0">File: <strong>{{ batch.file_name }}</strong> (Batch #{{ batch.id }})</p>
+    </div>
+    <a href="{% url 'imports:upload' %}" class="btn btn-sm btn-outline-secondary">
+        <i class="bi bi-arrow-left me-1"></i> Upload Another File
+    </a>
+</div>
+
+{% if duplicate_batch %}
+<div class="alert alert-warning d-flex align-items-center gap-3 p-3 mb-4 shadow-sm" role="alert">
+    <i class="bi bi-exclamation-triangle-fill fs-4 text-warning"></i>
+    <div>
+        <strong>Duplicate File Detected:</strong> This identical file was previously imported in Batch #{{ duplicate_batch.id }} on {{ duplicate_batch.uploaded_at|date:"d M Y H:i" }}.
+        You can choose to append records as a new period or replace the previous import below.
+    </div>
+</div>
+{% endif %}
+
+<!-- Worksheet Selector Tabs -->
+{% if detected_sheets|length > 1 %}
+<div class="card border-0 shadow-sm rounded-3 p-3 mb-4">
+    <label class="form-label text-muted small fw-bold mb-2">Detected Worksheets in Workbook:</label>
+    <div class="d-flex gap-2 flex-wrap">
+        {% for s in detected_sheets %}
+        <a href="?sheet={{ s }}" class="btn btn-sm {% if current_sheet == s %}btn-primary fw-bold shadow-sm{% else %}btn-outline-secondary{% endif %}">
+            <i class="bi bi-file-earmark-spreadsheet me-1"></i> {{ s }}
+        </a>
+        {% endfor %}
+    </div>
+</div>
+{% endif %}
+
+<!-- 50 Rows Preview Table -->
+<div class="table-card mb-4">
+    <div class="p-3 border-bottom d-flex align-items-center justify-content-between bg-light">
+        <div class="d-flex align-items-center gap-2">
+            <h6 class="mb-0 fw-bold"><i class="bi bi-table me-2 text-primary"></i>Source Sheet Data Preview</h6>
+            <span class="badge bg-primary text-white">{{ preview_rows|length }} Preview Rows</span>
+        </div>
+        <span class="text-muted small">Inspecting sheet: <strong>{{ current_sheet }}</strong></span>
+    </div>
+    <div class="table-responsive" style="max-height: 280px;">
+        <table class="table table-sm custom-table mb-0 small">
+            <thead>
+                <tr>
+                    <th>#</th>
+                    {% for h in headers %}
+                    <th>{{ h }}</th>
+                    {% endfor %}
+                </tr>
+            </thead>
+            <tbody>
+                {% for row in preview_rows %}
+                <tr>
+                    <td class="text-muted">{{ forloop.counter }}</td>
+                    {% for cell in row %}
+                    <td class="text-nowrap">{{ cell }}</td>
+                    {% endfor %}
+                </tr>
+                {% empty %}
+                <tr>
+                    <td colspan="{{ headers|length|add:1 }}" class="text-center py-3 text-muted">No preview rows available.</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<!-- Column Mapping Form -->
+<div class="card border-0 shadow-sm rounded-3 p-4 mb-4">
+    <div class="border-bottom pb-2 mb-3">
+        <h5 class="fw-bold mb-1">Confirm System Field Mapping</h5>
+        <p class="text-muted small mb-0">Our AI has automatically matched your Excel headers to system fields. Adjust if necessary.</p>
+    </div>
+
+    <form method="POST">
+        {% csrf_token %}
+        <div class="row g-3 mb-4">
+            <!-- Month Label -->
+            <div class="col-md-4">
+                <label class="form-label small fw-bold">Month / Period <span class="text-danger">*</span></label>
+                <select name="map_month_label" class="form-select form-select-sm" required>
+                    <option value="__ignore__">-- Not Present --</option>
+                    {% for col in raw_columns %}
+                    <option value="{{ col }}" {% if suggested_mapping.month_label == col %}selected{% endif %}>{{ col }}</option>
+                    {% endfor %}
+                </select>
+                <div class="form-text small">e.g. Apr`26, Months</div>
+            </div>
+
+            <!-- Dealer Code -->
+            <div class="col-md-4">
+                <label class="form-label small fw-bold">Dealer Code <span class="text-danger">*</span></label>
+                <select name="map_dealer_code" class="form-select form-select-sm" required>
+                    <option value="__ignore__">-- Not Present --</option>
+                    {% for col in raw_columns %}
+                    <option value="{{ col }}" {% if suggested_mapping.dealer_code == col %}selected{% endif %}>{{ col }}</option>
+                    {% endfor %}
+                </select>
+                <div class="form-text small">e.g. Dealer Code, DMS Code</div>
+            </div>
+
+            <!-- Firm Name -->
+            <div class="col-md-4">
+                <label class="form-label small fw-bold">Firm Name</label>
+                <select name="map_firm_name" class="form-select form-select-sm">
+                    <option value="__ignore__">-- Not Present --</option>
+                    {% for col in raw_columns %}
+                    <option value="{{ col }}" {% if suggested_mapping.firm_name == col %}selected{% endif %}>{{ col }}</option>
+                    {% endfor %}
+                </select>
+                <div class="form-text small">Agency or Partner name</div>
+            </div>
+
+            <!-- RM -->
+            <div class="col-md-4">
+                <label class="form-label small fw-bold">Relationship Manager (RM) <span class="text-danger">*</span></label>
+                <select name="map_rm" class="form-select form-select-sm" required>
+                    <option value="__ignore__">-- Not Present --</option>
+                    {% for col in raw_columns %}
+                    <option value="{{ col }}" {% if suggested_mapping.rm == col %}selected{% endif %}>{{ col }}</option>
+                    {% endfor %}
+                </select>
+                <div class="form-text small">e.g. RM, Relationship Manager</div>
+            </div>
+
+            <!-- Experience Category -->
+            <div class="col-md-4">
+                <label class="form-label small fw-bold">Experience Category</label>
+                <select name="map_raw_category" class="form-select form-select-sm">
+                    <option value="__ignore__">-- Not Present --</option>
+                    {% for col in raw_columns %}
+                    <option value="{{ col }}" {% if suggested_mapping.raw_category == col %}selected{% endif %}>{{ col }}</option>
+                    {% endfor %}
+                </select>
+                <div class="form-text small">e.g. Dine-Out/Salon/Spa/Photoshoot/Concert</div>
+            </div>
+
+            <!-- Payment SPOC -->
+            <div class="col-md-4">
+                <label class="form-label small fw-bold">Payment SPOC</label>
+                <select name="map_payment_spoc" class="form-select form-select-sm">
+                    <option value="__ignore__">-- Not Present --</option>
+                    {% for col in raw_columns %}
+                    <option value="{{ col }}" {% if suggested_mapping.payment_spoc == col %}selected{% endif %}>{{ col }}</option>
+                    {% endfor %}
+                </select>
+                <div class="form-text small">Payment coordinator</div>
+            </div>
+
+            <!-- Billing Amount -->
+            <div class="col-md-4">
+                <label class="form-label small fw-bold">Billing Amount <span class="text-danger">*</span></label>
+                <select name="map_billing_amount" class="form-select form-select-sm" required>
+                    <option value="__ignore__">-- Not Present --</option>
+                    {% for col in raw_columns %}
+                    <option value="{{ col }}" {% if suggested_mapping.billing_amount == col %}selected{% endif %}>{{ col }}</option>
+                    {% endfor %}
+                </select>
+                <div class="form-text small">Invoiced transaction amount</div>
+            </div>
+
+            <!-- Amount Paid -->
+            <div class="col-md-4">
+                <label class="form-label small fw-bold">Amount Paid</label>
+                <select name="map_amount_paid" class="form-select form-select-sm">
+                    <option value="__ignore__">-- Not Present --</option>
+                    {% for col in raw_columns %}
+                    <option value="{{ col }}" {% if suggested_mapping.amount_paid == col %}selected{% endif %}>{{ col }}</option>
+                    {% endfor %}
+                </select>
+                <div class="form-text small">Payment collected / realized</div>
+            </div>
+
+            <!-- STORY Amount -->
+            <div class="col-md-4">
+                <label class="form-label small fw-bold">STORY Amount (Source Column)</label>
+                <select name="map_story_amount" class="form-select form-select-sm">
+                    <option value="__ignore__">-- Not Present --</option>
+                    {% for col in raw_columns %}
+                    <option value="{{ col }}" {% if suggested_mapping.story_amount == col %}selected{% endif %}>{{ col }}</option>
+                    {% endfor %}
+                </select>
+                <div class="form-text small">Preserved dedicated STORY margin</div>
+            </div>
+        </div>
+
+        <!-- Import Strategy Choice -->
+        <div class="border rounded p-3 mb-4 bg-light">
+            <h6 class="fw-bold mb-2">Import Ingestion Strategy:</h6>
+            <div class="form-check mb-2">
+                <input class="form-check-input" type="radio" name="import_mode" id="mode_new" value="new" checked>
+                <label class="form-check-label" for="mode_new">
+                    <strong>Import as New Period / Append:</strong> Preserves existing records and appends new transactions. Automatically identifies potential duplicate candidates.
+                </label>
+            </div>
+            <div class="form-check">
+                <input class="form-check-input" type="radio" name="import_mode" id="mode_replace" value="replace">
+                <label class="form-check-label" for="mode_replace">
+                    <strong>Replace Previous Import:</strong> Soft-deactivates previous batch records with matching file signature and imports this workbook as the active replacement.
+                </label>
+            </div>
+        </div>
+
+        <div class="d-flex justify-content-end gap-2">
+            <a href="{% url 'imports:upload' %}" class="btn btn-outline-secondary">Cancel</a>
+            <button type="submit" class="btn btn-primary px-4 fw-semibold">
+                <i class="bi bi-play-circle me-1"></i> Execute Transactional Import
+            </button>
+        </div>
+    </form>
+</div>
+{% endblock %}

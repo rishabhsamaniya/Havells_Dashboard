@@ -1,0 +1,41 @@
+# Python & Django environment
+venv/
+env/
+.venv/
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+
+# Environment secrets
+.env
+
+# Database (use 'python manage.py setup_havells_data' to seed)
+db.sqlite3
+db.sqlite3-journal
+
+# User uploads in media directory
+media/uploads/*
+!media/uploads/.gitkeep
+
+# Logs
+*.log
+
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+._*
+
+# IDE & Editor files
+.vscode/
+.idea/
+*.sublime-project
+*.sublime-workspace
+*.swp
+*.swo
+
+# Test & coverage artifacts
+.coverage
+htmlcov/
+.pytest_cache/

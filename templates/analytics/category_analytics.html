@@ -1,0 +1,147 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}Experience Category Analytics{% endblock %}
+
+{% block content %}
+<div class="d-flex align-items-center justify-content-between mb-3">
+    <div>
+        <h3 class="mb-0 fw-bold">Experience Category Analytics</h3>
+        <p class="text-muted small mb-0">Performance breakdown across Dine-Out, Salon, Spa, Photoshoot, Concert, and other experiences</p>
+    </div>
+    <div class="d-flex gap-2">
+        <a href="{% url 'quality:categories' %}" class="btn btn-sm btn-outline-primary">
+            <i class="bi bi-sliders me-1"></i> Category Normalization
+        </a>
+        <a href="{% url 'analytics:export_mis' %}?{{ request.GET.urlencode }}" class="btn btn-sm btn-outline-success">
+            <i class="bi bi-file-earmark-excel me-1"></i> Export Category Report
+        </a>
+    </div>
+</div>
+
+{% include 'components/filter_bar.html' %}
+
+<!-- Charts -->
+<div class="row g-3 mb-4">
+    <div class="col-lg-8">
+        <div class="chart-card">
+            <div class="chart-header">
+                <h5 class="chart-title"><i class="bi bi-bar-chart-steps text-primary me-2"></i>Category Billing Volume & Margins</h5>
+            </div>
+            <div id="chart-cat-bar" style="height: 350px;"></div>
+        </div>
+    </div>
+    <div class="col-lg-4">
+        <div class="chart-card">
+            <div class="chart-header">
+                <h5 class="chart-title"><i class="bi bi-pie-chart text-purple me-2"></i>Category Share of Billing</h5>
+            </div>
+            <div id="chart-cat-pie" style="height: 350px;"></div>
+        </div>
+    </div>
+</div>
+
+<!-- Detailed Table -->
+<div class="table-card">
+    <div class="p-3 border-bottom d-flex align-items-center justify-content-between bg-light">
+        <h6 class="mb-0 fw-bold">Experience Category Performance Table</h6>
+    </div>
+    <div class="table-responsive">
+        <table class="table custom-table">
+            <thead>
+                <tr>
+                    <th>Category Name</th>
+                    <th class="text-end">Billing Amount</th>
+                    <th class="text-end">Amount Paid</th>
+                    <th class="text-end">STORY Amount</th>
+                    <th class="text-end">STORY %</th>
+                    <th class="text-end">Transactions</th>
+                    <th class="text-end">Unique Dealers</th>
+                    <th class="text-end">Avg Billing / Tx</th>
+                    <th class="text-end">% Share of Total</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for c in cat_data.category_list %}
+                <tr>
+                    <td class="fw-bold text-primary">
+                        <a href="{% url 'analytics:transactions' %}?category={{ c.standardized_category }}" class="text-decoration-none">
+                            <i class="bi bi-tag-fill me-1"></i> {{ c.standardized_category }}
+                        </a>
+                    </td>
+                    <td class="text-end fw-bold">{{ c.billing|inr }}</td>
+                    <td class="text-end text-success">{{ c.paid|inr }}</td>
+                    <td class="text-end text-purple fw-semibold">{{ c.story|inr }}</td>
+                    <td class="text-end">
+                        <span class="badge bg-light border px-2" style="color: #000000 !important; font-weight: 700;">
+                            {{ c.story_pct }}%
+                        </span>
+                    </td>
+                    <td class="text-end">{{ c.tx_count }}</td>
+                    <td class="text-end">{{ c.unique_dealers }}</td>
+                    <td class="text-end">{{ c.avg_billing|inr }}</td>
+                    <td class="text-end text-muted">{{ c.share_billing }}%</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    const catData = {{ plotly_cat_json|safe }};
+    const catNames = catData.map(d => d.category);
+    const catBilling = catData.map(d => d.billing);
+    const catStory = catData.map(d => d.story);
+    const catFormatted = catBilling.map(v => formatINR(v));
+
+    const trace1 = {
+        x: catNames,
+        y: catBilling,
+        name: 'Billing Amount',
+        type: 'bar',
+        marker: { color: '#2563EB' },
+        text: catFormatted,
+        textposition: 'auto'
+    };
+    const trace2 = {
+        x: catNames,
+        y: catStory,
+        name: 'STORY Margin',
+        type: 'bar',
+        marker: { color: '#8B5CF6' },
+        text: catStory.map(v => formatINR(v)),
+        textposition: 'auto'
+    };
+
+    Plotly.newPlot('chart-cat-bar', [trace1, trace2], {
+        barmode: 'group',
+        margin: { t: 20, r: 20, l: 60, b: 60 },
+        legend: { orientation: 'h', y: 1.15, x: 0 },
+        yaxis: { title: 'Amount (₹)', gridcolor: '#F1F5F9' },
+        plot_bgcolor: '#FFFFFF',
+        paper_bgcolor: '#FFFFFF',
+    }, { responsive: true, displayModeBar: false });
+
+    const tracePie = {
+        labels: catNames,
+        values: catBilling,
+        type: 'pie',
+        hole: 0.45,
+        customdata: catFormatted,
+        marker: { colors: ['#2563EB', '#10B981', '#F59E0B', '#8B5CF6', '#64748B', '#EC4899', '#06B6D4'] },
+        textinfo: 'percent+label',
+        textposition: 'inside',
+        insidetextorientation: 'radial',
+        hovertemplate: '<b>%{label}</b><br>Billing: %{customdata}<br>Share: %{percent}<extra></extra>'
+    };
+    Plotly.newPlot('chart-cat-pie', [tracePie], {
+        margin: { t: 20, r: 20, l: 20, b: 30 },
+        legend: { orientation: 'h', y: -0.15, x: 0, font: { size: 11 } },
+        plot_bgcolor: '#FFFFFF',
+        paper_bgcolor: '#FFFFFF',
+    }, { responsive: true, displayModeBar: false });
+</script>
+{% endblock %}

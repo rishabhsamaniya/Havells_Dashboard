@@ -1,0 +1,119 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}Dealer & Firm Analytics{% endblock %}
+
+{% block content %}
+<div class="d-flex align-items-center justify-content-between mb-3">
+    <div>
+        <h3 class="mb-0 fw-bold">Dealer Code & Firm Analytics</h3>
+        <p class="text-muted small mb-0">Dealer billing volumes, repeat engagement frequency, and margin performance</p>
+    </div>
+    <div class="d-flex gap-2">
+        <a href="{% url 'analytics:export_mis' %}?{{ request.GET.urlencode }}" class="btn btn-sm btn-outline-success">
+            <i class="bi bi-file-earmark-excel me-1"></i> Export Dealer Report
+        </a>
+    </div>
+</div>
+
+{% include 'components/filter_bar.html' %}
+
+<!-- KPI Header -->
+<div class="row g-3 mb-4">
+    <div class="col-md-4">
+        <div class="kpi-card">
+            <div class="kpi-title"><span>Total Unique Dealers</span><i class="bi bi-shop text-primary fs-5"></i></div>
+            <div class="kpi-value">{{ dealer_data.total_unique_dealers }}</div>
+            <div class="kpi-sub"><span>Distinct partner codes in active dataset</span></div>
+        </div>
+    </div>
+    <div class="col-md-4">
+        <div class="kpi-card danger">
+            <div class="kpi-title"><span>Dealers with Negative STORY</span><i class="bi bi-exclamation-triangle text-danger fs-5"></i></div>
+            <div class="kpi-value text-danger">{{ dealer_data.dealers_with_neg_story|length }}</div>
+            <div class="kpi-sub"><span>Requires commercial review</span></div>
+        </div>
+    </div>
+    <div class="col-md-4">
+        <div class="kpi-card warning">
+            <div class="kpi-title"><span>Dealers with Zero STORY</span><i class="bi bi-dash-circle text-warning fs-5"></i></div>
+            <div class="kpi-value text-warning">{{ dealer_data.dealers_with_zero_story|length }}</div>
+            <div class="kpi-sub"><span>Zero margin billing transactions</span></div>
+        </div>
+    </div>
+</div>
+
+<!-- Top Billing Dealers Table -->
+<div class="table-card mb-4">
+    <div class="p-3 border-bottom d-flex align-items-center justify-content-between bg-light">
+        <h6 class="mb-0 fw-bold"><i class="bi bi-award text-primary me-2"></i>Top Billing Dealers & Partner Firms</h6>
+        <span class="text-muted small">Showing Top 50 Dealers</span>
+    </div>
+    <div class="table-responsive">
+        <table class="table custom-table">
+            <thead>
+                <tr>
+                    <th>Dealer Code</th>
+                    <th>Firm Name</th>
+                    <th class="text-end">Billing Amount</th>
+                    <th class="text-end">Amount Paid</th>
+                    <th class="text-end">STORY Amount</th>
+                    <th class="text-end">Billing Frequency (Txns)</th>
+                    <th class="text-end">Active Months</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for d in dealer_data.top_dealers %}
+                <tr>
+                    <td class="fw-bold">
+                        <a href="{% url 'analytics:transactions' %}?search={{ d.dealer_code }}" class="text-decoration-none">
+                            {{ d.dealer_code }}
+                        </a>
+                    </td>
+                    <td>{{ d.firm_name }}</td>
+                    <td class="text-end fw-bold">{{ d.billing|inr }}</td>
+                    <td class="text-end text-success">{{ d.paid|inr }}</td>
+                    <td class="text-end text-purple fw-semibold">{{ d.story|inr }}</td>
+                    <td class="text-end">{{ d.tx_count }}</td>
+                    <td class="text-end">{{ d.active_months }}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<!-- Dealers with Negative STORY Table -->
+{% if dealer_data.dealers_with_neg_story %}
+<div class="table-card mb-4 border-danger">
+    <div class="p-3 border-bottom d-flex align-items-center justify-content-between bg-danger-subtle">
+        <h6 class="mb-0 fw-bold text-danger"><i class="bi bi-exclamation-triangle-fill me-2"></i>Dealers with Negative STORY Margin</h6>
+        <span class="badge bg-danger text-white">Commercial Exception</span>
+    </div>
+    <div class="table-responsive">
+        <table class="table custom-table">
+            <thead>
+                <tr>
+                    <th>Dealer Code</th>
+                    <th>Firm Name</th>
+                    <th class="text-end">Billing Amount</th>
+                    <th class="text-end">STORY Amount</th>
+                    <th class="text-end">Transactions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for d in dealer_data.dealers_with_neg_story %}
+                <tr>
+                    <td class="fw-bold">{{ d.dealer_code }}</td>
+                    <td>{{ d.firm_name }}</td>
+                    <td class="text-end">{{ d.billing|inr }}</td>
+                    <td class="text-end fw-bold text-danger">{{ d.story|inr }}</td>
+                    <td class="text-end">{{ d.tx_count }}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endif %}
+{% endblock %}

@@ -1,0 +1,229 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}STORY Margin Analytics{% endblock %}
+
+{% block content %}
+<div class="d-flex align-items-center justify-content-between mb-3">
+    <div>
+        <h3 class="mb-0 fw-bold">STORY Margin & Profitability Analytics</h3>
+        <p class="text-muted small mb-0">In-depth breakdown of STORY values, distributions, positive/negative records, and RM contributions</p>
+    </div>
+    <div class="d-flex gap-2">
+        <a href="{% url 'analytics:export_mis' %}?{{ request.GET.urlencode }}" class="btn btn-sm btn-outline-success">
+            <i class="bi bi-file-earmark-excel me-1"></i> Export STORY Report
+        </a>
+    </div>
+</div>
+
+{% include 'components/filter_bar.html' %}
+
+<!-- Policy & Accounting Note -->
+<div class="alert alert-light border border-primary-subtle d-flex align-items-center gap-3 p-3 mb-4 shadow-sm">
+    <i class="bi bi-info-circle-fill text-primary fs-4"></i>
+    <div class="small">
+        <strong class="text-dark">Source of Truth Policy:</strong>
+        The dedicated <code>STORY</code> column from the uploaded workbook is preserved as the authoritative source of truth.
+        Active definition: <strong>{{ story_metric_definition.get_formula_type_display }}</strong>.
+        Values are audited independently without automatically assuming STORY equals Billing minus Paid.
+    </div>
+    <a href="{% url 'core:settings' %}" class="btn btn-sm btn-outline-primary ms-auto text-nowrap">Configure Definition</a>
+</div>
+
+<!-- STORY KPI Distribution Cards -->
+<div class="row g-3 mb-4">
+    <!-- Total STORY -->
+    <div class="col-md-3">
+        <div class="kpi-card purple">
+            <div class="kpi-title">
+                <span>Total Portfolio STORY</span>
+                <i class="bi bi-stars text-purple fs-5"></i>
+            </div>
+            <div class="kpi-value text-purple">{{ story.total_story|inr }}</div>
+            <div class="kpi-sub">
+                <span class="text-muted">STORY Margin:</span>
+                <span class="fw-bold" style="color: #000000 !important; font-size: 0.95rem;">{{ story.overall_story_pct }}% of Billing</span>
+            </div>
+        </div>
+    </div>
+
+    <!-- Positive STORY -->
+    <div class="col-md-3">
+        <div class="kpi-card success">
+            <div class="kpi-title">
+                <span>Positive STORY Records</span>
+                <i class="bi bi-check2-circle text-success fs-5"></i>
+            </div>
+            <div class="kpi-value text-success">{{ story.pos_count }} <span class="fs-6 text-muted">txns</span></div>
+            <div class="kpi-sub">
+                <span>Sum: {{ story.pos_sum|inr }}</span>
+            </div>
+        </div>
+    </div>
+
+    <!-- Zero STORY -->
+    <div class="col-md-3">
+        <div class="kpi-card warning">
+            <div class="kpi-title">
+                <span>Zero STORY Records</span>
+                <i class="bi bi-dash-circle text-warning fs-5"></i>
+            </div>
+            <div class="kpi-value text-warning">{{ story.zero_count }} <span class="fs-6 text-muted">txns</span></div>
+            <div class="kpi-sub">
+                <span class="text-muted">Zero margin or at-cost fulfillment</span>
+            </div>
+        </div>
+    </div>
+
+    <!-- Negative STORY -->
+    <div class="col-md-3">
+        <div class="kpi-card danger">
+            <div class="kpi-title">
+                <span>Negative STORY Records</span>
+                <i class="bi bi-exclamation-octagon text-danger fs-5"></i>
+            </div>
+            <div class="kpi-value text-danger">{{ story.neg_count }} <span class="fs-6 text-muted">txns</span></div>
+            <div class="kpi-sub">
+                <span>Sum: <strong>{{ story.neg_sum|inr }}</strong></span>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Charts -->
+<div class="row g-3 mb-4">
+    <div class="col-lg-6">
+        <div class="chart-card">
+            <div class="chart-header">
+                <h5 class="chart-title"><i class="bi bi-people text-purple me-2"></i>STORY Contribution by RM</h5>
+            </div>
+            <div id="chart-story-rm" style="height: 320px;"></div>
+        </div>
+    </div>
+    <div class="col-lg-6">
+        <div class="chart-card">
+            <div class="chart-header">
+                <h5 class="chart-title"><i class="bi bi-tags text-primary me-2"></i>STORY Contribution by Category</h5>
+            </div>
+            <div id="chart-story-cat" style="height: 320px;"></div>
+        </div>
+    </div>
+</div>
+
+<!-- Extremes Tables: Top Positive vs Negative Outliers -->
+<div class="row g-3">
+    <!-- Top 10 Highest STORY -->
+    <div class="col-lg-6">
+        <div class="table-card">
+            <div class="p-3 border-bottom d-flex align-items-center justify-content-between bg-light">
+                <h6 class="mb-0 fw-bold text-success"><i class="bi bi-arrow-up-circle me-1"></i>Top 10 Highest STORY Transactions</h6>
+            </div>
+            <div class="table-responsive">
+                <table class="table custom-table">
+                    <thead>
+                        <tr>
+                            <th>Dealer / Firm</th>
+                            <th>RM</th>
+                            <th>Category</th>
+                            <th class="text-end">Billing</th>
+                            <th class="text-end">STORY</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for tx in story.top_story_txs %}
+                        <tr>
+                            <td>
+                                <div class="fw-bold">{{ tx.dealer_code }}</div>
+                                <div class="text-muted small text-truncate" style="max-width: 150px;">{{ tx.firm_name }}</div>
+                            </td>
+                            <td>{{ tx.rm }}</td>
+                            <td><span class="badge bg-light text-dark border">{{ tx.standardized_category }}</span></td>
+                            <td class="text-end">{{ tx.billing_amount|inr }}</td>
+                            <td class="text-end fw-bold text-purple">{{ tx.story_amount|inr }}</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <!-- Lowest / Negative STORY Transactions -->
+    <div class="col-lg-6">
+        <div class="table-card">
+            <div class="p-3 border-bottom d-flex align-items-center justify-content-between bg-light">
+                <h6 class="mb-0 fw-bold text-danger"><i class="bi bi-arrow-down-circle me-1"></i>Lowest / Negative STORY Exceptions</h6>
+                <span class="badge bg-danger-subtle text-danger border border-danger-subtle">Review Required</span>
+            </div>
+            <div class="table-responsive">
+                <table class="table custom-table">
+                    <thead>
+                        <tr>
+                            <th>Dealer / Firm</th>
+                            <th>RM</th>
+                            <th>Category</th>
+                            <th class="text-end">Billing</th>
+                            <th class="text-end">STORY</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for tx in story.lowest_story_txs %}
+                        <tr>
+                            <td>
+                                <div class="fw-bold">{{ tx.dealer_code }}</div>
+                                <div class="text-muted small text-truncate" style="max-width: 150px;">{{ tx.firm_name }}</div>
+                            </td>
+                            <td>{{ tx.rm }}</td>
+                            <td><span class="badge bg-light text-dark border">{{ tx.standardized_category }}</span></td>
+                            <td class="text-end">{{ tx.billing_amount|inr }}</td>
+                            <td class="text-end fw-bold {% if tx.story_amount < 0 %}text-danger{% else %}text-muted{% endif %}">
+                                {{ tx.story_amount|inr }}
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    const rmStoryData = {{ story_rm_json|safe }};
+    const catStoryData = {{ story_cat_json|safe }};
+
+    // RM STORY Chart
+    const traceRM = {
+        x: rmStoryData.map(d => d.rm),
+        y: rmStoryData.map(d => d.story),
+        type: 'bar',
+        marker: { color: '#8B5CF6' },
+        text: rmStoryData.map(d => formatINR(d.story)),
+        textposition: 'auto'
+    };
+    Plotly.newPlot('chart-story-rm', [traceRM], {
+        margin: { t: 20, r: 20, l: 60, b: 40 },
+        yaxis: { title: 'STORY (₹)', gridcolor: '#F1F5F9' },
+        plot_bgcolor: '#FFFFFF',
+        paper_bgcolor: '#FFFFFF',
+    }, { responsive: true, displayModeBar: false });
+
+    // Category STORY Chart
+    const traceCat = {
+        x: catStoryData.map(d => d.cat),
+        y: catStoryData.map(d => d.story),
+        type: 'bar',
+        marker: { color: '#2563EB' },
+        text: catStoryData.map(d => formatINR(d.story)),
+        textposition: 'auto'
+    };
+    Plotly.newPlot('chart-story-cat', [traceCat], {
+        margin: { t: 20, r: 20, l: 60, b: 60 },
+        yaxis: { title: 'STORY (₹)', gridcolor: '#F1F5F9' },
+        plot_bgcolor: '#FFFFFF',
+        paper_bgcolor: '#FFFFFF',
+    }, { responsive: true, displayModeBar: false });
+</script>
+{% endblock %}

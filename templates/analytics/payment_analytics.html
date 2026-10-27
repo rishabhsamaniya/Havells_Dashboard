@@ -1,0 +1,156 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}Payment Reconciliation Analytics{% endblock %}
+
+{% block content %}
+<div class="d-flex align-items-center justify-content-between mb-3">
+    <div>
+        <h3 class="mb-0 fw-bold">Payment Reconciliation & SPOC Audit</h3>
+        <p class="text-muted small mb-0">Reconciliation between billed amount and amount paid, SPOC tracking, and dealer variance analysis</p>
+    </div>
+    <div class="d-flex gap-2">
+        <a href="{% url 'analytics:export_mis' %}?{{ request.GET.urlencode }}" class="btn btn-sm btn-outline-success">
+            <i class="bi bi-file-earmark-excel me-1"></i> Export Payment Report
+        </a>
+    </div>
+</div>
+
+{% include 'components/filter_bar.html' %}
+
+<!-- KPI Cards -->
+<div class="row g-3 mb-4">
+    <div class="col-md-3">
+        <div class="kpi-card">
+            <div class="kpi-title">
+                <span>Total Billing</span>
+                <i class="bi bi-receipt text-primary fs-5"></i>
+            </div>
+            <div class="kpi-value text-primary">{{ payment.total_billing|inr }}</div>
+            <div class="kpi-sub"><span>Gross Invoiced Value</span></div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="kpi-card success">
+            <div class="kpi-title">
+                <span>Total Amount Paid</span>
+                <i class="bi bi-cash-stack text-success fs-5"></i>
+            </div>
+            <div class="kpi-value text-success">{{ payment.total_paid|inr }}</div>
+            <div class="kpi-sub">
+                <span class="text-muted">Collection Ratio: <strong>{{ payment.paid_pct }}%</strong></span>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="kpi-card warning">
+            <div class="kpi-title">
+                <span>Billing - Paid Difference</span>
+                <i class="bi bi-calculator text-warning fs-5"></i>
+            </div>
+            <div class="kpi-value text-warning">{{ payment.reconciliation_diff|inr }}</div>
+            <div class="kpi-sub">
+                <span class="text-muted">Net Unpaid / Pending Balance</span>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="kpi-card info">
+            <div class="kpi-title">
+                <span>Realization %</span>
+                <i class="bi bi-percent text-info fs-5"></i>
+            </div>
+            <div class="kpi-value text-info">{{ payment.paid_pct }}%</div>
+            <div class="kpi-sub">
+                <span class="text-muted">Paid vs Billed Percentage</span>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- SPOC Reconciliation Table -->
+<div class="table-card mb-4">
+    <div class="p-3 border-bottom d-flex align-items-center justify-content-between bg-light">
+        <h6 class="mb-0 fw-bold"><i class="bi bi-person-badge text-primary me-2"></i>Payment SPOC Workload & Payment Comparison</h6>
+        <span class="text-muted small">SPOC assigned to records</span>
+    </div>
+    <div class="table-responsive">
+        <table class="table custom-table">
+            <thead>
+                <tr>
+                    <th>Payment SPOC</th>
+                    <th class="text-end">Billing Amount</th>
+                    <th class="text-end">Amount Paid</th>
+                    <th class="text-end">Difference (Billing - Paid)</th>
+                    <th class="text-end">STORY Amount</th>
+                    <th class="text-end">Paid %</th>
+                    <th class="text-end">Transactions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for sp in payment.spoc_reconciliation %}
+                <tr>
+                    <td class="fw-bold text-dark">
+                        <a href="{% url 'analytics:transactions' %}?spoc={{ sp.payment_spoc }}" class="text-decoration-none">
+                            {{ sp.payment_spoc }}
+                        </a>
+                    </td>
+                    <td class="text-end fw-bold">{{ sp.billing|inr }}</td>
+                    <td class="text-end text-success">{{ sp.paid|inr }}</td>
+                    <td class="text-end text-warning fw-semibold">{{ sp.diff|inr }}</td>
+                    <td class="text-end text-purple">{{ sp.story|inr }}</td>
+                    <td class="text-end">
+                        <span class="badge bg-light text-dark border">
+                            {{ sp.paid_pct }}%
+                        </span>
+                    </td>
+                    <td class="text-end">{{ sp.tx_count }}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<!-- Dealer Discrepancies Table -->
+<div class="table-card">
+    <div class="p-3 border-bottom d-flex align-items-center justify-content-between bg-light">
+        <h6 class="mb-0 fw-bold text-warning"><i class="bi bi-exclamation-circle me-2"></i>Dealers with Payment Variances (Billing ≠ Amount Paid)</h6>
+        <span class="badge bg-warning-subtle text-warning border border-warning-subtle">Top 25 Variances</span>
+    </div>
+    <div class="table-responsive">
+        <table class="table custom-table">
+            <thead>
+                <tr>
+                    <th>Dealer Code</th>
+                    <th>Firm Name</th>
+                    <th class="text-end">Billing Amount</th>
+                    <th class="text-end">Amount Paid</th>
+                    <th class="text-end">Variance Amount</th>
+                    <th class="text-end">Transactions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for d in payment.mismatch_dealers %}
+                <tr>
+                    <td class="fw-bold">
+                        <a href="{% url 'analytics:transactions' %}?search={{ d.dealer_code }}" class="text-decoration-none">
+                            {{ d.dealer_code }}
+                        </a>
+                    </td>
+                    <td>{{ d.firm_name }}</td>
+                    <td class="text-end">{{ d.billing|inr }}</td>
+                    <td class="text-end text-success">{{ d.paid|inr }}</td>
+                    <td class="text-end fw-bold text-danger">{{ d.diff|inr }}</td>
+                    <td class="text-end">{{ d.tx_count }}</td>
+                </tr>
+                {% empty %}
+                <tr>
+                    <td colspan="6" class="text-center py-4 text-muted">No dealer payment variances detected for the active filters.</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endblock %}

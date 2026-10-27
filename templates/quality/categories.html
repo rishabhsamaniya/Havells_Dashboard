@@ -1,0 +1,112 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}Category Normalization Mapping{% endblock %}
+
+{% block content %}
+<div class="d-flex align-items-center justify-content-between mb-3">
+    <div>
+        <h3 class="mb-0 fw-bold">Experience Category Normalization</h3>
+        <p class="text-muted small mb-0">Standardize spelling variations (e.g. Dine-Out / Dine out, Spa / SPA) while preserving original source text</p>
+    </div>
+</div>
+
+<div class="alert alert-light border border-info-subtle d-flex align-items-center gap-3 p-3 mb-4 shadow-sm">
+    <i class="bi bi-shield-check text-info fs-3"></i>
+    <div class="small">
+        <strong class="text-dark">Normalization Policy:</strong>
+        Original raw category text is permanently preserved in <code>raw_category</code> and <code>raw_source_data</code> for audit integrity.
+        Standardization updates <code>standardized_category</code> for unified reporting without altering financial records.
+    </div>
+</div>
+
+<div class="table-card">
+    <div class="p-3 border-bottom d-flex align-items-center justify-content-between bg-light">
+        <h6 class="mb-0 fw-bold">Active Category Mappings ({{ mappings|length }} Categories)</h6>
+    </div>
+    <div class="table-responsive">
+        <table class="table custom-table">
+            <thead>
+                <tr>
+                    <th>Raw Category (As in Excel)</th>
+                    <th>Standardized Target Category</th>
+                    <th class="text-end">Transactions</th>
+                    <th class="text-end">Total Billing Amount</th>
+                    <th class="text-end">Total STORY</th>
+                    <th class="text-center">Review Status</th>
+                    <th class="text-center">Action</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for item in mappings %}
+                <tr>
+                    <td class="fw-bold text-secondary">
+                        <code>{{ item.mapping.raw_category }}</code>
+                    </td>
+                    <td class="fw-bold text-primary">
+                        <span class="badge bg-primary-subtle text-primary border border-primary-subtle px-2 py-1 fs-6">
+                            {{ item.mapping.standardized_category }}
+                        </span>
+                    </td>
+                    <td class="text-end">{{ item.tx_count }}</td>
+                    <td class="text-end fw-bold">{{ item.billing_sum|inr }}</td>
+                    <td class="text-end text-purple">{{ item.story_sum|inr }}</td>
+                    <td class="text-center">
+                        {% if item.mapping.is_reviewed %}
+                        <span class="badge bg-success-subtle text-success border border-success-subtle"><i class="bi bi-check-lg"></i> Confirmed</span>
+                        {% else %}
+                        <span class="badge bg-warning-subtle text-warning border border-warning-subtle">Auto-Suggested</span>
+                        {% endif %}
+                    </td>
+                    <td class="text-center">
+                        <button type="button" class="btn btn-xs btn-outline-primary py-0 px-2" data-bs-toggle="modal" data-bs-target="#editModal{{ forloop.counter }}" title="Edit Normalization">
+                            <i class="bi bi-pencil"></i> Edit
+                        </button>
+
+                        <!-- Edit Modal -->
+                        <div class="modal fade" id="editModal{{ forloop.counter }}" tabindex="-1" aria-hidden="true">
+                            <div class="modal-dialog text-start">
+                                <div class="modal-content">
+                                    <form method="POST">
+                                        {% csrf_token %}
+                                        <input type="hidden" name="action" value="update_mapping">
+                                        <input type="hidden" name="raw_category" value="{{ item.mapping.raw_category }}">
+                                        
+                                        <div class="modal-header bg-light">
+                                            <h6 class="modal-title fw-bold">Map Standard Category</h6>
+                                            <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                                        </div>
+                                        <div class="modal-body">
+                                            <div class="mb-3">
+                                                <label class="form-label small fw-bold">Original Raw Text:</label>
+                                                <input type="text" class="form-control form-control-sm" value="{{ item.mapping.raw_category }}" disabled>
+                                            </div>
+                                            <div class="mb-3">
+                                                <label class="form-label small fw-bold">Standardized Category Name:</label>
+                                                <input type="text" name="standardized_category" class="form-control form-control-sm" value="{{ item.mapping.standardized_category }}" required>
+                                                <div class="form-text small">e.g. Dine-Out, Salon, Spa, Photoshoot, Concert</div>
+                                            </div>
+                                            <div class="alert alert-light border small">
+                                                Updating this standard category will immediately re-index <strong>{{ item.tx_count }}</strong> existing billing transactions.
+                                            </div>
+                                        </div>
+                                        <div class="modal-footer bg-light">
+                                            <button type="button" class="btn btn-sm btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                                            <button type="submit" class="btn btn-sm btn-primary">Confirm Normalization</button>
+                                        </div>
+                                    </form>
+                                </div>
+                            </div>
+                        </div>
+                    </td>
+                </tr>
+                {% empty %}
+                <tr>
+                    <td colspan="7" class="text-center py-4 text-muted">No category mappings recorded yet.</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endblock %}

@@ -1,0 +1,477 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}Profit & Loss (P&L) Analytics{% endblock %}
+
+{% block content %}
+<div class="d-flex align-items-center justify-content-between mb-3">
+    <div>
+        <h3 class="mb-0 fw-bold">Profit & Loss (P&L) Statement & Financial Analytics</h3>
+        <p class="text-muted small mb-0">Track and analyze monthly and yearly revenue, fulfillment costs, gross profits, and operating margins</p>
+    </div>
+    <div class="d-flex gap-2">
+        <a href="{% url 'analytics:export_pnl' %}?{{ request.GET.urlencode }}" class="btn btn-sm btn-outline-success shadow-sm">
+            <i class="bi bi-file-earmark-excel me-1"></i> Export P&L Statement (.xlsx)
+        </a>
+        <a href="{% url 'analytics:export_mis' %}?{{ request.GET.urlencode }}" class="btn btn-sm btn-outline-primary shadow-sm">
+            <i class="bi bi-file-earmark-spreadsheet me-1"></i> Full MIS Workbook
+        </a>
+    </div>
+</div>
+
+{% include 'components/filter_bar.html' %}
+
+<!-- P&L Headline Financial Cards -->
+<div class="row g-3 mb-4">
+    <!-- Gross Revenue -->
+    <div class="col-xl-3 col-md-6">
+        <div class="kpi-card">
+            <div class="kpi-title">
+                <span>Gross Billing Revenue</span>
+                <i class="bi bi-receipt text-primary fs-5" data-bs-toggle="tooltip" title="Total invoiced billing value"></i>
+            </div>
+            <div class="kpi-value text-primary">{{ pnl.gross_revenue|inr }}</div>
+            <div class="kpi-sub">
+                <span class="text-muted">Direct Run Rate:</span>
+                <span class="fw-semibold text-dark">{{ pnl.avg_monthly_revenue|inr }}/mo</span>
+            </div>
+        </div>
+    </div>
+
+    <!-- Fulfillment Cost -->
+    <div class="col-xl-3 col-md-6">
+        <div class="kpi-card warning">
+            <div class="kpi-title">
+                <span>Direct Fulfillment Cost</span>
+                <i class="bi bi-wallet2 text-warning fs-5" data-bs-toggle="tooltip" title="Direct payout / amount paid for service fulfillment"></i>
+            </div>
+            <div class="kpi-value text-warning">{{ pnl.fulfillment_cost|inr }}</div>
+            <div class="kpi-sub">
+                <span class="text-muted">Cost-to-Income Ratio:</span>
+                <span class="fw-bold text-dark">{{ pnl.cost_ratio_pct }}%</span>
+            </div>
+        </div>
+    </div>
+
+    <!-- Net Profit / STORY -->
+    <div class="col-xl-3 col-md-6">
+        <div class="kpi-card purple">
+            <div class="kpi-title">
+                <span>Net Gross Profit (STORY)</span>
+                <i class="bi bi-trophy text-purple fs-5" data-bs-toggle="tooltip" title="Gross Profit Margin = Revenue - Cost"></i>
+            </div>
+            <div class="kpi-value text-purple">{{ pnl.net_profit|inr }}</div>
+            <div class="kpi-sub">
+                <span class="badge bg-purple-subtle text-dark fw-bold border px-2">Net Margin</span>
+                <span class="fw-bold text-dark ms-1">{{ pnl.profit_margin_pct }}% of Revenue</span>
+            </div>
+        </div>
+    </div>
+
+    <!-- Average Monthly Profit -->
+    <div class="col-xl-3 col-md-6">
+        <div class="kpi-card success">
+            <div class="kpi-title">
+                <span>Avg Monthly Profit Run Rate</span>
+                <i class="bi bi-graph-up-arrow text-success fs-5" data-bs-toggle="tooltip" title="Average profit generated per active month"></i>
+            </div>
+            <div class="kpi-value text-success">{{ pnl.avg_monthly_profit|inr }}</div>
+            <div class="kpi-sub">
+                <span>Peak Month: <strong>{{ pnl.peak_profit_month }}</strong></span>
+                <span class="ms-auto text-muted">{{ pnl.peak_profit_val|inr }}</span>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Interactive Charts Row 1: Monthly Revenue vs Cost vs Profit & Profit Waterfall -->
+<div class="row g-3 mb-4">
+    <div class="col-lg-8">
+        <div class="chart-card">
+            <div class="chart-header">
+                <h5 class="chart-title"><i class="bi bi-bar-chart-line-fill text-primary me-2"></i>Monthly P&L Comparison: Revenue vs Direct Cost vs Net Profit</h5>
+                <span class="badge bg-light text-dark border">Monthly Trend</span>
+            </div>
+            <div id="chart-pnl-monthly" style="height: 350px;"></div>
+        </div>
+    </div>
+
+    <div class="col-lg-4">
+        <div class="chart-card">
+            <div class="chart-header">
+                <h5 class="chart-title"><i class="bi bi-funnel-fill text-purple me-2"></i>P&L Waterfall Breakdown</h5>
+            </div>
+            <div id="chart-pnl-waterfall" style="height: 350px;"></div>
+        </div>
+    </div>
+</div>
+
+<!-- Interactive Charts Row 2: Profit Margin % Trajectory & Cumulative Profit -->
+<div class="row g-3 mb-4">
+    <div class="col-lg-6">
+        <div class="chart-card">
+            <div class="chart-header">
+                <h5 class="chart-title"><i class="bi bi-activity text-info me-2"></i>Monthly Profit Margin % Trend</h5>
+                <span class="badge bg-info-subtle text-dark fw-bold">Margin % Trajectory</span>
+            </div>
+            <div id="chart-pnl-margin" style="height: 300px;"></div>
+        </div>
+    </div>
+
+    <div class="col-lg-6">
+        <div class="chart-card">
+            <div class="chart-header">
+                <h5 class="chart-title"><i class="bi bi-graph-up text-success me-2"></i>Cumulative Profit Trajectory</h5>
+                <span class="badge bg-success-subtle text-dark fw-bold">Cumulative Net Margin</span>
+            </div>
+            <div id="chart-pnl-cumulative" style="height: 300px;"></div>
+        </div>
+    </div>
+</div>
+
+<!-- Monthly P&L Ledger Statement Table -->
+<div class="table-card mb-4">
+    <div class="p-3 border-bottom d-flex align-items-center justify-content-between bg-light">
+        <h6 class="mb-0 fw-bold"><i class="bi bi-file-earmark-spreadsheet-fill text-primary me-2"></i>Monthly Profit & Loss (P&L) Statement</h6>
+        <span class="text-muted small">Period progression</span>
+    </div>
+    <div class="table-responsive">
+        <table class="table custom-table">
+            <thead>
+                <tr>
+                    <th>Reporting Month</th>
+                    <th class="text-end">Gross Revenue</th>
+                    <th class="text-end">Direct Cost</th>
+                    <th class="text-end">Net Profit / STORY</th>
+                    <th class="text-end">Profit Margin %</th>
+                    <th class="text-end">Cost Ratio %</th>
+                    <th class="text-end">MoM Rev Growth</th>
+                    <th class="text-end">MoM Profit Growth</th>
+                    <th class="text-end">Cumulative Profit</th>
+                    <th class="text-end">Transactions</th>
+                    <th class="text-end">Avg Profit / Tx</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for m in pnl.monthly_pnl %}
+                <tr>
+                    <td class="fw-bold text-primary">
+                        <a href="{% url 'analytics:transactions' %}?month={{ m.month_label }}" class="text-decoration-none">
+                            <i class="bi bi-calendar3 me-1"></i> {{ m.month_label }}
+                        </a>
+                    </td>
+                    <td class="text-end fw-bold">{{ m.revenue|inr }}</td>
+                    <td class="text-end text-warning fw-semibold">{{ m.cost|inr }}</td>
+                    <td class="text-end text-purple fw-bold">{{ m.profit|inr }}</td>
+                    <td class="text-end">
+                        <span class="badge bg-purple-subtle text-dark fw-bold border px-2">
+                            {{ m.margin_pct }}%
+                        </span>
+                    </td>
+                    <td class="text-end text-muted">{{ m.cost_pct }}%</td>
+                    <td class="text-end">
+                        {% if m.rev_growth_pct is not None %}
+                        <span class="fw-bold {% if m.rev_growth_pct >= 0 %}text-success{% else %}text-danger{% endif %}">
+                            {% if m.rev_growth_pct > 0 %}+{% endif %}{{ m.rev_growth_pct }}%
+                        </span>
+                        {% else %}-{% endif %}
+                    </td>
+                    <td class="text-end">
+                        {% if m.profit_growth_pct is not None %}
+                        <span class="fw-bold {% if m.profit_growth_pct >= 0 %}text-success{% else %}text-danger{% endif %}">
+                            {% if m.profit_growth_pct > 0 %}+{% endif %}{{ m.profit_growth_pct }}%
+                        </span>
+                        {% else %}-{% endif %}
+                    </td>
+                    <td class="text-end text-success fw-bold">{{ m.cumulative_profit|inr }}</td>
+                    <td class="text-end">{{ m.tx_count }}</td>
+                    <td class="text-end">{{ m.avg_profit_tx|inr }}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+            <tfoot>
+                <tr class="table-light fw-bold">
+                    <td>Grand Total</td>
+                    <td class="text-end text-primary">{{ pnl.gross_revenue|inr }}</td>
+                    <td class="text-end text-warning">{{ pnl.fulfillment_cost|inr }}</td>
+                    <td class="text-end text-purple">{{ pnl.net_profit|inr }}</td>
+                    <td class="text-end">
+                        <span class="badge bg-purple-subtle text-dark fw-bold border px-2">
+                            {{ pnl.profit_margin_pct }}%
+                        </span>
+                    </td>
+                    <td class="text-end text-muted">{{ pnl.cost_ratio_pct }}%</td>
+                    <td class="text-end">-</td>
+                    <td class="text-end">-</td>
+                    <td class="text-end text-success">{{ pnl.net_profit|inr }}</td>
+                    <td class="text-end">{{ pnl.tx_count }}</td>
+                    <td class="text-end">{{ pnl.avg_monthly_profit|inr }}/mo</td>
+                </tr>
+            </tfoot>
+        </table>
+    </div>
+</div>
+
+<!-- Annual & Quarterly P&L Statement -->
+<div class="row g-3 mb-4">
+    <div class="col-lg-6">
+        <div class="table-card h-100">
+            <div class="p-3 border-bottom d-flex align-items-center justify-content-between bg-light">
+                <h6 class="mb-0 fw-bold"><i class="bi bi-calendar-range-fill text-primary me-2"></i>Annual & Quarterly Performance (P&L)</h6>
+            </div>
+            <div class="table-responsive">
+                <table class="table custom-table">
+                    <thead>
+                        <tr>
+                            <th>Fiscal Year / Quarter</th>
+                            <th class="text-end">Revenue</th>
+                            <th class="text-end">Direct Cost</th>
+                            <th class="text-end">Net Profit</th>
+                            <th class="text-end">Margin %</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for y in pnl.yearly_pnl %}
+                        <tr class="table-light fw-bold">
+                            <td><i class="bi bi-bank2 me-1"></i> FY {{ y.financial_year }} (Full Year)</td>
+                            <td class="text-end text-primary">{{ y.revenue|inr }}</td>
+                            <td class="text-end text-warning">{{ y.cost|inr }}</td>
+                            <td class="text-end text-purple">{{ y.profit|inr }}</td>
+                            <td class="text-end"><span class="badge bg-purple-subtle text-dark fw-bold border">{{ y.margin_pct }}%</span></td>
+                        </tr>
+                        {% if y.q1.revenue > 0 %}
+                        <tr>
+                            <td class="ps-4 text-secondary">Q1 (Apr - Jun)</td>
+                            <td class="text-end">{{ y.q1.revenue|inr }}</td>
+                            <td class="text-end text-muted">{{ y.q1.cost|inr }}</td>
+                            <td class="text-end text-purple fw-semibold">{{ y.q1.profit|inr }}</td>
+                            <td class="text-end"><span class="badge bg-light text-dark border">{{ y.q1.margin_pct }}%</span></td>
+                        </tr>
+                        {% endif %}
+                        {% if y.q2.revenue > 0 %}
+                        <tr>
+                            <td class="ps-4 text-secondary">Q2 (Jul - Sep)</td>
+                            <td class="text-end">{{ y.q2.revenue|inr }}</td>
+                            <td class="text-end text-muted">{{ y.q2.cost|inr }}</td>
+                            <td class="text-end text-purple fw-semibold">{{ y.q2.profit|inr }}</td>
+                            <td class="text-end"><span class="badge bg-light text-dark border">{{ y.q2.margin_pct }}%</span></td>
+                        </tr>
+                        {% endif %}
+                        {% if y.q3.revenue > 0 %}
+                        <tr>
+                            <td class="ps-4 text-secondary">Q3 (Oct - Dec)</td>
+                            <td class="text-end">{{ y.q3.revenue|inr }}</td>
+                            <td class="text-end text-muted">{{ y.q3.cost|inr }}</td>
+                            <td class="text-end text-purple fw-semibold">{{ y.q3.profit|inr }}</td>
+                            <td class="text-end"><span class="badge bg-light text-dark border">{{ y.q3.margin_pct }}%</span></td>
+                        </tr>
+                        {% endif %}
+                        {% if y.q4.revenue > 0 %}
+                        <tr>
+                            <td class="ps-4 text-secondary">Q4 (Jan - Mar)</td>
+                            <td class="text-end">{{ y.q4.revenue|inr }}</td>
+                            <td class="text-end text-muted">{{ y.q4.cost|inr }}</td>
+                            <td class="text-end text-purple fw-semibold">{{ y.q4.profit|inr }}</td>
+                            <td class="text-end"><span class="badge bg-light text-dark border">{{ y.q4.margin_pct }}%</span></td>
+                        </tr>
+                        {% endif %}
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <!-- Category Profitability -->
+    <div class="col-lg-6">
+        <div class="table-card h-100">
+            <div class="p-3 border-bottom d-flex align-items-center justify-content-between bg-light">
+                <h6 class="mb-0 fw-bold"><i class="bi bi-tags-fill text-purple me-2"></i>Experience Category Profitability</h6>
+                <span class="text-muted small">Ranked by Net Profit</span>
+            </div>
+            <div class="table-responsive">
+                <table class="table custom-table">
+                    <thead>
+                        <tr>
+                            <th>Category</th>
+                            <th class="text-end">Revenue</th>
+                            <th class="text-end">Cost</th>
+                            <th class="text-end">Net Profit</th>
+                            <th class="text-end">Margin %</th>
+                            <th class="text-end">Profit Share</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for c in pnl.category_pnl|slice:":8" %}
+                        <tr>
+                            <td class="fw-bold">
+                                <a href="{% url 'analytics:transactions' %}?category={{ c.standardized_category }}" class="text-decoration-none">
+                                    {{ c.standardized_category }}
+                                </a>
+                            </td>
+                            <td class="text-end">{{ c.revenue|inr }}</td>
+                            <td class="text-end text-muted">{{ c.cost|inr }}</td>
+                            <td class="text-end text-purple fw-bold">{{ c.profit|inr }}</td>
+                            <td class="text-end"><span class="badge bg-light text-dark border">{{ c.margin_pct }}%</span></td>
+                            <td class="text-end text-muted">{{ c.profit_share }}%</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- RM Profitability Table -->
+<div class="table-card mb-4">
+    <div class="p-3 border-bottom d-flex align-items-center justify-content-between bg-light">
+        <h6 class="mb-0 fw-bold"><i class="bi bi-people-fill text-success me-2"></i>Relationship Manager (RM) Profit Contribution</h6>
+    </div>
+    <div class="table-responsive">
+        <table class="table custom-table">
+            <thead>
+                <tr>
+                    <th>RM Name</th>
+                    <th class="text-end">Revenue Generated</th>
+                    <th class="text-end">Direct Cost</th>
+                    <th class="text-end">Net Profit Generated</th>
+                    <th class="text-end">Profit Margin %</th>
+                    <th class="text-end">Share of Total Profit</th>
+                    <th class="text-end">Transactions Handled</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for r in pnl.rm_pnl %}
+                <tr>
+                    <td class="fw-bold text-primary">
+                        <a href="{% url 'analytics:transactions' %}?rm={{ r.rm }}" class="text-decoration-none">
+                            <i class="bi bi-person-fill me-1"></i> {{ r.rm }}
+                        </a>
+                    </td>
+                    <td class="text-end fw-bold">{{ r.revenue|inr }}</td>
+                    <td class="text-end text-warning">{{ r.cost|inr }}</td>
+                    <td class="text-end text-purple fw-bold">{{ r.profit|inr }}</td>
+                    <td class="text-end">
+                        <span class="badge bg-purple-subtle text-dark fw-bold border px-2">
+                            {{ r.margin_pct }}%
+                        </span>
+                    </td>
+                    <td class="text-end fw-semibold">{{ r.profit_share }}%</td>
+                    <td class="text-end">{{ r.tx_count }}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    const mPnl = {{ monthly_pnl_json|safe }};
+    const mMonths = mPnl.map(d => d.month);
+    const mRevs = mPnl.map(d => d.revenue);
+    const mCosts = mPnl.map(d => d.cost);
+    const mProfits = mPnl.map(d => d.profit);
+    const mMargins = mPnl.map(d => d.margin_pct);
+    const mCumulative = mPnl.map(d => d.cumulative_profit);
+
+    // 1. Monthly Revenue vs Cost vs Profit Grouped Bar
+    const traceRev = {
+        x: mMonths,
+        y: mRevs,
+        name: 'Gross Revenue (₹)',
+        type: 'bar',
+        marker: { color: '#2563EB' }
+    };
+    const traceCost = {
+        x: mMonths,
+        y: mCosts,
+        name: 'Direct Cost (₹)',
+        type: 'bar',
+        marker: { color: '#F59E0B' }
+    };
+    const traceProfit = {
+        x: mMonths,
+        y: mProfits,
+        name: 'Net Profit (₹)',
+        type: 'bar',
+        marker: { color: '#8B5CF6' }
+    };
+
+    Plotly.newPlot('chart-pnl-monthly', [traceRev, traceCost, traceProfit], {
+        barmode: 'group',
+        margin: { t: 20, r: 20, l: 60, b: 40 },
+        legend: { orientation: 'h', y: 1.15, x: 0 },
+        yaxis: { title: 'Amount (₹)', gridcolor: '#F1F5F9' },
+        plot_bgcolor: '#FFFFFF',
+        paper_bgcolor: '#FFFFFF',
+    }, { responsive: true, displayModeBar: false });
+
+    // 2. Waterfall Chart
+    const totalRev = {{ pnl.gross_revenue|floatformat:2 }};
+    const totalCost = {{ pnl.fulfillment_cost|floatformat:2 }};
+    const totalProfit = {{ pnl.net_profit|floatformat:2 }};
+
+    const traceWaterfall = {
+        name: "P&L",
+        type: "waterfall",
+        orientation: "v",
+        measure: ["relative", "relative", "total"],
+        x: ["Gross Revenue", "Direct Fulfillment Cost", "Net Gross Profit"],
+        textposition: "outside",
+        text: [formatINR(totalRev), "-" + formatINR(totalCost), formatINR(totalProfit)],
+        y: [totalRev, -totalCost, totalProfit],
+        connector: { line: { color: "rgb(63, 63, 63)" } },
+        decreasing: { marker: { color: "#EF4444" } },
+        increasing: { marker: { color: "#2563EB" } },
+        totals: { marker: { color: "#8B5CF6" } }
+    };
+
+    Plotly.newPlot('chart-pnl-waterfall', [traceWaterfall], {
+        margin: { t: 30, r: 20, l: 60, b: 60 },
+        yaxis: { title: "Amount (₹)", gridcolor: "#F1F5F9" },
+        plot_bgcolor: "#FFFFFF",
+        paper_bgcolor: "#FFFFFF",
+    }, { responsive: true, displayModeBar: false });
+
+    // 3. Profit Margin % Trend Line
+    const traceMargin = {
+        x: mMonths,
+        y: mMargins,
+        name: 'Margin %',
+        type: 'scatter',
+        mode: 'lines+markers',
+        line: { color: '#06B6D4', width: 3 },
+        marker: { size: 8 }
+    };
+
+    Plotly.newPlot('chart-pnl-margin', [traceMargin], {
+        margin: { t: 20, r: 20, l: 50, b: 40 },
+        yaxis: { title: 'Profit Margin %', gridcolor: '#F1F5F9', ticksuffix: '%' },
+        plot_bgcolor: '#FFFFFF',
+        paper_bgcolor: '#FFFFFF',
+    }, { responsive: true, displayModeBar: false });
+
+    // 4. Cumulative Profit Area
+    const traceCum = {
+        x: mMonths,
+        y: mCumulative,
+        name: 'Cumulative Profit (₹)',
+        type: 'scatter',
+        mode: 'lines+markers',
+        line: { color: '#10B981', width: 3 },
+        fill: 'tozeroy',
+        fillcolor: 'rgba(16, 185, 129, 0.1)',
+        marker: { size: 8 }
+    };
+
+    Plotly.newPlot('chart-pnl-cumulative', [traceCum], {
+        margin: { t: 20, r: 20, l: 60, b: 40 },
+        yaxis: { title: 'Cumulative Profit (₹)', gridcolor: '#F1F5F9' },
+        plot_bgcolor: '#FFFFFF',
+        paper_bgcolor: '#FFFFFF',
+    }, { responsive: true, displayModeBar: false });
+</script>
+{% endblock %}

@@ -1,0 +1,128 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}Upload Excel Workbook{% endblock %}
+
+{% block content %}
+<div class="row justify-content-center">
+    <div class="col-lg-8">
+        <div class="d-flex align-items-center justify-content-between mb-3">
+            <div>
+                <h3 class="mb-0 fw-bold">Excel Billing Sheet Ingestion</h3>
+                <p class="text-muted small mb-0">Upload monthly or multi-month billing workbooks (.xlsx or .xls)</p>
+            </div>
+            <a href="{% url 'imports:history' %}" class="btn btn-sm btn-outline-secondary">
+                <i class="bi bi-clock-history me-1"></i> Import History
+            </a>
+        </div>
+
+        <div class="card border-0 shadow-sm rounded-3 p-4 mb-4">
+            <form method="POST" enctype="multipart/form-data" id="upload-form">
+                {% csrf_token %}
+                <div class="upload-dropzone mb-3" id="dropzone" onclick="document.getElementById('file-input').click()">
+                    <div class="rounded-circle bg-primary-subtle text-primary p-3 d-inline-flex mb-3">
+                        <i class="bi bi-cloud-arrow-up-fill fs-1"></i>
+                    </div>
+                    <h5 class="fw-bold mb-1">Click to select or drag and drop Excel file here</h5>
+                    <p class="text-muted small mb-3">Supports .xlsx and .xls workbooks (up to 50MB)</p>
+                    <input type="file" name="excel_file" id="file-input" class="d-none" accept=".xlsx,.xls" onchange="fileSelected(this)">
+                    <div id="file-selected-name" class="fw-bold text-primary mt-2"></div>
+                </div>
+
+                <div class="alert alert-light border small text-secondary mb-3">
+                    <i class="bi bi-shield-check text-success me-1"></i>
+                    <strong>Automated Intake Guarantees:</strong>
+                    Multi-worksheet discovery, automatic column header detection, duplicate hash detection, and non-destructive atomic database transactions.
+                </div>
+
+                <div class="d-grid">
+                    <button type="submit" class="btn btn-primary py-2 fw-semibold" id="submit-btn" disabled>
+                        <i class="bi bi-arrow-right-circle me-1"></i> Continue to Worksheet & Column Mapping
+                    </button>
+                </div>
+            </form>
+        </div>
+
+        <!-- Recent Upload Batches -->
+        <div class="table-card">
+            <div class="p-3 border-bottom d-flex align-items-center justify-content-between bg-light">
+                <h6 class="mb-0 fw-bold">Recent Import Batches</h6>
+                <a href="{% url 'imports:history' %}" class="small text-decoration-none">View All</a>
+            </div>
+            <div class="table-responsive">
+                <table class="table custom-table mb-0">
+                    <thead>
+                        <tr>
+                            <th>File Name</th>
+                            <th>Sheet</th>
+                            <th>Uploaded</th>
+                            <th class="text-end">Billing Total</th>
+                            <th class="text-end">Records</th>
+                            <th>Status</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for b in recent_batches %}
+                        <tr>
+                            <td class="fw-semibold text-truncate" style="max-width: 200px;">{{ b.file_name }}</td>
+                            <td><span class="badge bg-light text-dark border">{{ b.sheet_name }}</span></td>
+                            <td class="text-muted small">{{ b.uploaded_at|date:"d M Y H:i" }}</td>
+                            <td class="text-end fw-bold">{{ b.total_billing_amount|inr }}</td>
+                            <td class="text-end">{{ b.successful_records }}</td>
+                            <td>
+                                {% if b.status == 'COMPLETED' %}
+                                <span class="badge bg-success-subtle text-success border border-success-subtle">Completed</span>
+                                {% elif b.status == 'PROCESSING' %}
+                                <span class="badge bg-warning-subtle text-warning border border-warning-subtle">Processing</span>
+                                {% elif b.status == 'REPLACED' %}
+                                <span class="badge bg-secondary-subtle text-secondary border">Replaced</span>
+                                {% else %}
+                                <span class="badge bg-danger-subtle text-danger border border-danger-subtle">{{ b.status }}</span>
+                                {% endif %}
+                            </td>
+                        </tr>
+                        {% empty %}
+                        <tr>
+                            <td colspan="6" class="text-center py-3 text-muted">No files uploaded yet.</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    function fileSelected(input) {
+        if (input.files && input.files[0]) {
+            const f = input.files[0];
+            document.getElementById('file-selected-name').innerHTML = 
+                `<i class="bi bi-file-earmark-excel text-success me-1"></i> Selected: <strong>${f.name}</strong> (${(f.size / (1024*1024)).toFixed(2)} MB)`;
+            document.getElementById('submit-btn').removeAttribute('disabled');
+        }
+    }
+
+    const dropzone = document.getElementById('dropzone');
+    dropzone.addEventListener('dragover', (e) => {
+        e.preventDefault();
+        dropzone.classList.add('bg-primary-subtle');
+    });
+    dropzone.addEventListener('dragleave', (e) => {
+        e.preventDefault();
+        dropzone.classList.remove('bg-primary-subtle');
+    });
+    dropzone.addEventListener('drop', (e) => {
+        e.preventDefault();
+        dropzone.classList.remove('bg-primary-subtle');
+        const dt = e.dataTransfer;
+        if (dt.files && dt.files[0]) {
+            const input = document.getElementById('file-input');
+            input.files = dt.files;
+            fileSelected(input);
+        }
+    });
+</script>
+{% endblock %}

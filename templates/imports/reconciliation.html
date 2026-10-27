@@ -1,0 +1,176 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}Source Sheet Reconciliation{% endblock %}
+
+{% block content %}
+<div class="d-flex align-items-center justify-content-between mb-3">
+    <div>
+        <h3 class="mb-0 fw-bold">Source Sheet vs Database Reconciliation</h3>
+        <p class="text-muted small mb-0">Mathematical proof of zero variance: Batch #{{ batch.id }} ({{ batch.file_name }} / {{ batch.sheet_name }})</p>
+    </div>
+    <div class="d-flex gap-2">
+        <a href="{% url 'imports:history' %}" class="btn btn-sm btn-outline-secondary">
+            <i class="bi bi-clock-history me-1"></i> All Batches
+        </a>
+        <a href="{% url 'analytics:dashboard' %}" class="btn btn-sm btn-primary">
+            <i class="bi bi-speedometer2 me-1"></i> View Dashboard
+        </a>
+    </div>
+</div>
+
+{% if reconcile.is_perfect_match %}
+<div class="alert alert-success d-flex align-items-center gap-3 p-3 mb-4 shadow-sm">
+    <i class="bi bi-patch-check-fill fs-3 text-success"></i>
+    <div>
+        <h5 class="fw-bold mb-1 text-success">100% Exact Financial Reconciliation: Zero Variance Detected</h5>
+        <div class="small">
+            Every transaction row, billing amount, amount paid, and STORY value in the raw Excel worksheet matches the database records down to the exact paisa (₹0.00 difference).
+        </div>
+    </div>
+</div>
+{% else %}
+<div class="alert alert-warning d-flex align-items-center gap-3 p-3 mb-4 shadow-sm">
+    <i class="bi bi-exclamation-triangle-fill fs-3 text-warning"></i>
+    <div>
+        <h5 class="fw-bold mb-1 text-warning">Reconciliation Variance Detected</h5>
+        <div class="small">
+            There is a discrepancy between raw Excel sheet sums and successfully imported database records. Check rejected records or validation filters.
+        </div>
+    </div>
+</div>
+{% endif %}
+
+<!-- Comparison Grid -->
+<div class="row g-3 mb-4">
+    <!-- Row Count -->
+    <div class="col-md-3">
+        <div class="kpi-card">
+            <div class="kpi-title"><span>Total Line Items / Rows</span><i class="bi bi-list-ol text-primary fs-5"></i></div>
+            <div class="kpi-value">{{ reconcile.db_rows }}</div>
+            <div class="kpi-sub">
+                <span>Excel Source: <strong>{{ reconcile.excel_rows }}</strong></span>
+                <span class="ms-auto {% if reconcile.diff_rows == 0 %}text-success{% else %}text-danger{% endif %} fw-bold">
+                    Diff: {{ reconcile.diff_rows }}
+                </span>
+            </div>
+        </div>
+    </div>
+
+    <!-- Billing Amount -->
+    <div class="col-md-3">
+        <div class="kpi-card success">
+            <div class="kpi-title"><span>Total Billing Amount</span><i class="bi bi-receipt text-success fs-5"></i></div>
+            <div class="kpi-value text-primary">{{ reconcile.db_billing|inr }}</div>
+            <div class="kpi-sub">
+                <span>Excel: {{ reconcile.excel_billing|inr }}</span>
+                <span class="ms-auto {% if reconcile.diff_billing == 0 %}text-success{% else %}text-danger{% endif %} fw-bold">
+                    Diff: {{ reconcile.diff_billing|inr }}
+                </span>
+            </div>
+        </div>
+    </div>
+
+    <!-- Amount Paid -->
+    <div class="col-md-3">
+        <div class="kpi-card">
+            <div class="kpi-title"><span>Total Amount Paid</span><i class="bi bi-cash-stack text-success fs-5"></i></div>
+            <div class="kpi-value text-success">{{ reconcile.db_paid|inr }}</div>
+            <div class="kpi-sub">
+                <span>Excel: {{ reconcile.excel_paid|inr }}</span>
+                <span class="ms-auto {% if reconcile.diff_paid == 0 %}text-success{% else %}text-danger{% endif %} fw-bold">
+                    Diff: {{ reconcile.diff_paid|inr }}
+                </span>
+            </div>
+        </div>
+    </div>
+
+    <!-- STORY Amount -->
+    <div class="col-md-3">
+        <div class="kpi-card purple">
+            <div class="kpi-title"><span>Total STORY Margin</span><i class="bi bi-stars text-purple fs-5"></i></div>
+            <div class="kpi-value text-purple">{{ reconcile.db_story|inr }}</div>
+            <div class="kpi-sub">
+                <span>Excel: {{ reconcile.excel_story|inr }}</span>
+                <span class="ms-auto {% if reconcile.diff_story == 0 %}text-success{% else %}text-danger{% endif %} fw-bold">
+                    Diff: {{ reconcile.diff_story|inr }}
+                </span>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Detailed Reconciliation Table -->
+<div class="table-card mb-4">
+    <div class="p-3 border-bottom d-flex align-items-center justify-content-between bg-light">
+        <h6 class="mb-0 fw-bold">Metric-by-Metric Comparison Audit Table</h6>
+    </div>
+    <div class="table-responsive">
+        <table class="table custom-table">
+            <thead>
+                <tr>
+                    <th>Audited Dimension / Metric</th>
+                    <th class="text-end">Excel Source File Value</th>
+                    <th class="text-end">Imported Database Value</th>
+                    <th class="text-end">Variance (Diff)</th>
+                    <th class="text-center">Verification Status</th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr>
+                    <td class="fw-bold">Total Record Count</td>
+                    <td class="text-end">{{ reconcile.excel_rows }}</td>
+                    <td class="text-end">{{ reconcile.db_rows }}</td>
+                    <td class="text-end fw-bold {% if reconcile.diff_rows == 0 %}text-success{% else %}text-danger{% endif %}">{{ reconcile.diff_rows }}</td>
+                    <td class="text-center">
+                        {% if reconcile.diff_rows == 0 %}
+                        <span class="badge bg-success-subtle text-success border border-success-subtle"><i class="bi bi-check-lg"></i> Reconciled</span>
+                        {% else %}
+                        <span class="badge bg-danger-subtle text-danger border border-danger-subtle">Discrepancy</span>
+                        {% endif %}
+                    </td>
+                </tr>
+                <tr>
+                    <td class="fw-bold">Total Gross Billing Amount</td>
+                    <td class="text-end">{{ reconcile.excel_billing|inr }}</td>
+                    <td class="text-end fw-bold text-primary">{{ reconcile.db_billing|inr }}</td>
+                    <td class="text-end fw-bold {% if reconcile.diff_billing == 0 %}text-success{% else %}text-danger{% endif %}">{{ reconcile.diff_billing|inr }}</td>
+                    <td class="text-center">
+                        {% if reconcile.diff_billing == 0 %}
+                        <span class="badge bg-success-subtle text-success border border-success-subtle"><i class="bi bi-check-lg"></i> Exact Match</span>
+                        {% else %}
+                        <span class="badge bg-danger-subtle text-danger border border-danger-subtle">Discrepancy</span>
+                        {% endif %}
+                    </td>
+                </tr>
+                <tr>
+                    <td class="fw-bold">Total Amount Paid</td>
+                    <td class="text-end">{{ reconcile.excel_paid|inr }}</td>
+                    <td class="text-end fw-bold text-success">{{ reconcile.db_paid|inr }}</td>
+                    <td class="text-end fw-bold {% if reconcile.diff_paid == 0 %}text-success{% else %}text-danger{% endif %}">{{ reconcile.diff_paid|inr }}</td>
+                    <td class="text-center">
+                        {% if reconcile.diff_paid == 0 %}
+                        <span class="badge bg-success-subtle text-success border border-success-subtle"><i class="bi bi-check-lg"></i> Exact Match</span>
+                        {% else %}
+                        <span class="badge bg-danger-subtle text-danger border border-danger-subtle">Discrepancy</span>
+                        {% endif %}
+                    </td>
+                </tr>
+                <tr>
+                    <td class="fw-bold">Total STORY Margin</td>
+                    <td class="text-end">{{ reconcile.excel_story|inr }}</td>
+                    <td class="text-end fw-bold text-purple">{{ reconcile.db_story|inr }}</td>
+                    <td class="text-end fw-bold {% if reconcile.diff_story == 0 %}text-success{% else %}text-danger{% endif %}">{{ reconcile.diff_story|inr }}</td>
+                    <td class="text-center">
+                        {% if reconcile.diff_story == 0 %}
+                        <span class="badge bg-success-subtle text-success border border-success-subtle"><i class="bi bi-check-lg"></i> Exact Match</span>
+                        {% else %}
+                        <span class="badge bg-danger-subtle text-danger border border-danger-subtle">Discrepancy</span>
+                        {% endif %}
+                    </td>
+                </tr>
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endblock %}

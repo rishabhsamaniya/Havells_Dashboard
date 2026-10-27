@@ -1,0 +1,395 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}Executive MIS Dashboard{% endblock %}
+
+{% block content %}
+<div class="d-flex align-items-center justify-content-between mb-3">
+    <div>
+        <h3 class="mb-0 fw-bold">Executive MIS Dashboard</h3>
+        <p class="text-muted small mb-0">Real-time dynamic billing intelligence, RM achievements, and STORY analytics</p>
+    </div>
+    <div class="d-flex gap-2">
+        <a href="{% url 'analytics:export_mis' %}?{{ request.GET.urlencode }}" class="btn btn-sm btn-outline-success shadow-sm">
+            <i class="bi bi-file-earmark-excel me-1"></i> Download MIS Workbook
+        </a>
+        <a href="{% url 'imports:upload' %}" class="btn btn-sm btn-primary shadow-sm">
+            <i class="bi bi-cloud-arrow-up me-1"></i> Upload Sheet
+        </a>
+    </div>
+</div>
+
+<!-- Global Filter Bar -->
+{% include 'components/filter_bar.html' %}
+
+<!-- Executive KPI Cards -->
+<div class="row g-3 mb-4">
+    <!-- Total Billing -->
+    <div class="col-xl-3 col-md-6">
+        <div class="kpi-card">
+            <div class="kpi-title">
+                <span>Total Billing Amount</span>
+                <i class="bi bi-receipt text-primary fs-5" data-bs-toggle="tooltip" title="Gross invoiced billing across active transactions"></i>
+            </div>
+            <div class="kpi-value text-primary">{{ kpis.total_billing|inr }}</div>
+            <div class="kpi-sub">
+                <span class="text-success fw-semibold"><i class="bi bi-check-circle me-1"></i>100% Invoiced</span>
+                <span class="ms-auto">{{ kpis.total_records }} Records</span>
+            </div>
+        </div>
+    </div>
+
+    <!-- Total Paid -->
+    <div class="col-xl-3 col-md-6">
+        <div class="kpi-card success">
+            <div class="kpi-title">
+                <span>Total Amount Paid</span>
+                <i class="bi bi-cash-coin text-success fs-5" data-bs-toggle="tooltip" title="Total payment collected / realized against billing"></i>
+            </div>
+            <div class="kpi-value text-success">{{ kpis.total_paid|inr }}</div>
+            <div class="kpi-sub">
+                <span class="text-muted">Paid Ratio:</span>
+                <span class="fw-semibold text-dark">
+                    {% widthratio kpis.total_paid kpis.total_billing 100 %}%
+                </span>
+                <span class="ms-auto text-muted">Diff: {{ kpis.payment_difference|inr }}</span>
+            </div>
+        </div>
+    </div>
+
+    <!-- Total STORY -->
+    <div class="col-xl-3 col-md-6">
+        <div class="kpi-card purple">
+            <div class="kpi-title">
+                <span>Total STORY Amount</span>
+                <i class="bi bi-stars text-purple fs-5" data-bs-toggle="tooltip" title="Preserved dedicated STORY margin column from source workbook"></i>
+            </div>
+            <div class="kpi-value" style="color: var(--color-purple);">{{ kpis.total_story|inr }}</div>
+            <div class="kpi-sub">
+                <span class="badge bg-light text-dark border px-2 py-0">STORY Ratio</span>
+                <span class="fw-bold ms-1" style="color: #000000 !important;">{{ kpis.story_percentage }}% of Billing</span>
+            </div>
+        </div>
+    </div>
+
+    <!-- MoM Growth -->
+    <div class="col-xl-3 col-md-6">
+        <div class="kpi-card {% if kpis.mom_growth_pct >= 0 %}info{% else %}danger{% endif %}">
+            <div class="kpi-title">
+                <span>MoM Billing Growth</span>
+                <i class="bi bi-graph-up text-info fs-5" data-bs-toggle="tooltip" title="Month-on-Month growth between latest two reporting periods"></i>
+            </div>
+            <div class="kpi-value {% if kpis.mom_growth_pct >= 0 %}text-info{% else %}text-danger{% endif %}">
+                {% if kpis.mom_growth_pct >= 0 %}+{% endif %}{{ kpis.mom_growth_pct }}%
+            </div>
+            <div class="kpi-sub">
+                <span>Peak Month: <strong>{{ kpis.highest_billing_month }}</strong></span>
+                <span class="ms-auto text-muted">{{ kpis.highest_billing_month_val|inr }}</span>
+            </div>
+        </div>
+    </div>
+
+    <!-- Unique Dealers -->
+    <div class="col-xl-3 col-md-6">
+        <div class="kpi-card">
+            <div class="kpi-title">
+                <span>Unique Dealers Handled</span>
+                <i class="bi bi-shop text-primary fs-5" data-bs-toggle="tooltip" title="Distinct dealer accounts billed in selected period"></i>
+            </div>
+            <div class="kpi-value">{{ kpis.unique_dealers }}</div>
+            <div class="kpi-sub">
+                <span>Unique Firms: <strong>{{ kpis.unique_firms }}</strong></span>
+                <span class="ms-auto text-muted">Avg: {{ kpis.avg_billing_dealer|inr }}/dealer</span>
+            </div>
+        </div>
+    </div>
+
+    <!-- Avg Billing per Tx -->
+    <div class="col-xl-3 col-md-6">
+        <div class="kpi-card">
+            <div class="kpi-title">
+                <span>Avg Billing / Record</span>
+                <i class="bi bi-calculator text-primary fs-5" data-bs-toggle="tooltip" title="Average monetary value per billing transaction"></i>
+            </div>
+            <div class="kpi-value">{{ kpis.avg_billing_record|inr }}</div>
+            <div class="kpi-sub">
+                <span>Population: {{ kpis.total_records }} lines</span>
+            </div>
+        </div>
+    </div>
+
+    <!-- Top RM -->
+    <div class="col-xl-3 col-md-6">
+        <div class="kpi-card warning">
+            <div class="kpi-title">
+                <span>Top Billing RM</span>
+                <i class="bi bi-award text-warning fs-5" data-bs-toggle="tooltip" title="Relationship manager with the highest total billing volume"></i>
+            </div>
+            <div class="kpi-value text-dark" style="font-size: 1.4rem;">{{ kpis.top_billing_rm }}</div>
+            <div class="kpi-sub">
+                <span class="text-warning fw-semibold">{{ kpis.top_billing_rm_val|inr }}</span>
+                <span class="ms-auto text-muted">Top STORY: {{ kpis.top_story_rm }}</span>
+            </div>
+        </div>
+    </div>
+
+    <!-- Data Quality Exceptions -->
+    <div class="col-xl-3 col-md-6">
+        <div class="kpi-card {% if kpis.critical_issues_count > 0 %}danger{% else %}success{% endif %}">
+            <div class="kpi-title">
+                <span>Data Quality Issues</span>
+                <i class="bi bi-shield-check text-success fs-5" data-bs-toggle="tooltip" title="Validation errors, potential duplicates, or business anomalies"></i>
+            </div>
+            <div class="kpi-value {% if kpis.critical_issues_count > 0 %}text-danger{% else %}text-success{% endif %}">
+                {{ kpis.quality_issues_count }}
+            </div>
+            <div class="kpi-sub">
+                <span>Critical / High: <strong>{{ kpis.critical_issues_count }}</strong></span>
+                <span class="ms-auto"><a href="{% url 'quality:issues' %}" class="text-primary text-decoration-none">Inspect <i class="bi bi-arrow-right"></i></a></span>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Interactive Charts Row 1 -->
+<div class="row g-3 mb-4">
+    <!-- RM Performance Chart -->
+    <div class="col-lg-7">
+        <div class="chart-card">
+            <div class="chart-header">
+                <h5 class="chart-title"><i class="bi bi-bar-chart-line text-primary me-2"></i>RM Billing Volume vs STORY Margin</h5>
+                <a href="{% url 'analytics:rm' %}" class="small text-decoration-none text-muted">Detailed RM Analytics <i class="bi bi-chevron-right"></i></a>
+            </div>
+            <div id="chart-rm-billing" style="height: 340px;"></div>
+        </div>
+    </div>
+
+    <!-- Category Share Donut Chart -->
+    <div class="col-lg-5">
+        <div class="chart-card">
+            <div class="chart-header">
+                <h5 class="chart-title"><i class="bi bi-pie-chart text-purple me-2"></i>Experience Category Mix</h5>
+                <a href="{% url 'analytics:category' %}" class="small text-decoration-none text-muted">All Categories <i class="bi bi-chevron-right"></i></a>
+            </div>
+            <div id="chart-category-donut" style="height: 340px;"></div>
+        </div>
+    </div>
+</div>
+
+<!-- Interactive Charts Row 2 -->
+<div class="row g-3 mb-4">
+    <!-- Monthly Billing Trend Area Chart -->
+    <div class="col-lg-8">
+        <div class="chart-card">
+            <div class="chart-header">
+                <h5 class="chart-title"><i class="bi bi-graph-up-arrow text-success me-2"></i>Monthly Billing vs Amount Paid vs STORY Trend</h5>
+                <a href="{% url 'analytics:monthly' %}" class="small text-decoration-none text-muted">Monthly Breakdowns <i class="bi bi-chevron-right"></i></a>
+            </div>
+            <div id="chart-monthly-trend" style="height: 320px;"></div>
+        </div>
+    </div>
+
+    <!-- MoM Growth & Key Metrics -->
+    <div class="col-lg-4">
+        <div class="chart-card">
+            <div class="chart-header">
+                <h5 class="chart-title"><i class="bi bi-activity text-info me-2"></i>MoM Billing Momentum</h5>
+                <span class="badge bg-light text-dark border">Growth %</span>
+            </div>
+            <div id="chart-mom-growth" style="height: 320px;"></div>
+        </div>
+    </div>
+</div>
+
+<!-- RM Summary Table -->
+<div class="table-card mb-4">
+    <div class="p-3 border-bottom d-flex align-items-center justify-content-between bg-light">
+        <h6 class="mb-0 fw-bold"><i class="bi bi-people-fill text-primary me-2"></i>Relationship Manager (RM) Performance Overview</h6>
+        <a href="{% url 'analytics:rm' %}" class="btn btn-sm btn-outline-primary">View Full RM Table & Targets</a>
+    </div>
+    <div class="table-responsive">
+        <table class="table custom-table">
+            <thead>
+                <tr>
+                    <th>RM Name</th>
+                    <th class="text-end">Total Billing</th>
+                    <th class="text-end">Amount Paid</th>
+                    <th class="text-end">STORY Amount</th>
+                    <th class="text-end">STORY %</th>
+                    <th class="text-end">Transactions</th>
+                    <th class="text-end">Unique Dealers</th>
+                    <th class="text-end">Share of Billing</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for r in rm_data %}
+                <tr>
+                    <td class="fw-semibold text-primary">
+                        <a href="{% url 'analytics:transactions' %}?rm={{ r.rm }}" class="text-decoration-none">
+                            {{ r.rm }}
+                        </a>
+                    </td>
+                    <td class="text-end fw-bold">{{ r.total_billing|inr }}</td>
+                    <td class="text-end text-success">{{ r.total_paid|inr }}</td>
+                    <td class="text-end text-purple fw-semibold">{{ r.total_story|inr }}</td>
+                    <td class="text-end">
+                        <span class="badge bg-light border px-2" style="color: #000000 !important; font-weight: 700;">
+                            {{ r.story_percentage }}%
+                        </span>
+                    </td>
+                    <td class="text-end">{{ r.tx_count }}</td>
+                    <td class="text-end">{{ r.unique_dealers }}</td>
+                    <td class="text-end text-muted">{{ r.share_billing_pct }}%</td>
+                </tr>
+                {% empty %}
+                <tr>
+                    <td colspan="8" class="text-center py-4 text-muted">No transactions found for the selected filter criteria.</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    // 1. RM Performance Chart
+    const rmData = {{ plotly_rm_json|safe }};
+    const rmNames = rmData.map(d => d.rm);
+    const rmBilling = rmData.map(d => d.billing);
+    const rmStory = rmData.map(d => d.story);
+    const rmStoryPct = rmData.map(d => d.story_pct);
+
+    const traceRMBilling = {
+        x: rmNames,
+        y: rmBilling,
+        name: 'Billing Amount (₹)',
+        type: 'bar',
+        marker: { color: '#2563EB', opacity: 0.9 },
+        text: rmBilling.map(v => formatINR(v)),
+        textposition: 'auto',
+        hoverinfo: 'x+text+name'
+    };
+
+    const traceRMStory = {
+        x: rmNames,
+        y: rmStory,
+        name: 'STORY Margin (₹)',
+        type: 'bar',
+        marker: { color: '#8B5CF6', opacity: 0.9 },
+        text: rmStory.map(v => formatINR(v)),
+        textposition: 'auto',
+        hoverinfo: 'x+text+name'
+    };
+
+    const rmLayout = {
+        barmode: 'group',
+        margin: { t: 20, r: 20, l: 60, b: 40 },
+        legend: { orientation: 'h', y: 1.15, x: 0 },
+        yaxis: { title: 'Amount (₹)', gridcolor: '#F1F5F9' },
+        xaxis: { gridcolor: 'transparent' },
+        plot_bgcolor: '#FFFFFF',
+        paper_bgcolor: '#FFFFFF',
+    };
+    Plotly.newPlot('chart-rm-billing', [traceRMBilling, traceRMStory], rmLayout, { responsive: true, displayModeBar: false });
+
+    // 2. Category Mix Donut Chart (< 9% grouped into Others)
+    const catData = {{ plotly_cat_json|safe }};
+    const catNames = catData.map(d => d.category);
+    const catBilling = catData.map(d => d.billing);
+    const catFormatted = catBilling.map(v => formatINR(v));
+
+    const traceCategory = {
+        labels: catNames,
+        values: catBilling,
+        type: 'pie',
+        hole: 0.52,
+        customdata: catFormatted,
+        marker: {
+            colors: ['#2563EB', '#10B981', '#F59E0B', '#8B5CF6', '#64748B', '#EC4899', '#06B6D4']
+        },
+        textinfo: 'percent+label',
+        textposition: 'inside',
+        insidetextorientation: 'radial',
+        hoverinfo: 'label+percent+value',
+        hovertemplate: '<b>%{label}</b><br>Billing: %{customdata}<br>Share: %{percent}<extra></extra>'
+    };
+    const catLayout = {
+        margin: { t: 15, r: 15, l: 15, b: 25 },
+        legend: {
+            orientation: 'h',
+            y: -0.15,
+            x: 0,
+            font: { size: 11 }
+        },
+        plot_bgcolor: '#FFFFFF',
+        paper_bgcolor: '#FFFFFF',
+    };
+    Plotly.newPlot('chart-category-donut', [traceCategory], catLayout, { responsive: true, displayModeBar: false });
+
+    // 3. Monthly Trends Area Chart
+    const mData = {{ plotly_month_json|safe }};
+    const mNames = mData.map(d => d.month);
+    const mBilling = mData.map(d => d.billing);
+    const mPaid = mData.map(d => d.paid);
+    const mStory = mData.map(d => d.story);
+
+    const traceMonthBilling = {
+        x: mNames,
+        y: mBilling,
+        name: 'Billing Amount',
+        type: 'scatter',
+        mode: 'lines+markers',
+        line: { color: '#2563EB', width: 3 },
+        fill: 'tozeroy',
+        fillcolor: 'rgba(37, 99, 235, 0.08)'
+    };
+    const traceMonthPaid = {
+        x: mNames,
+        y: mPaid,
+        name: 'Amount Paid',
+        type: 'scatter',
+        mode: 'lines+markers',
+        line: { color: '#10B981', width: 2, dash: 'dot' }
+    };
+    const traceMonthStory = {
+        x: mNames,
+        y: mStory,
+        name: 'STORY Margin',
+        type: 'scatter',
+        mode: 'lines+markers',
+        line: { color: '#8B5CF6', width: 2 }
+    };
+
+    const mLayout = {
+        margin: { t: 20, r: 20, l: 60, b: 40 },
+        legend: { orientation: 'h', y: 1.15, x: 0 },
+        yaxis: { title: 'Amount (₹)', gridcolor: '#F1F5F9' },
+        xaxis: { gridcolor: 'transparent' },
+        plot_bgcolor: '#FFFFFF',
+        paper_bgcolor: '#FFFFFF',
+    };
+    Plotly.newPlot('chart-monthly-trend', [traceMonthBilling, traceMonthPaid, traceMonthStory], mLayout, { responsive: true, displayModeBar: false });
+
+    // 4. MoM Growth Waterfall/Bar
+    const mGrowth = mData.map(d => d.growth);
+    const traceGrowth = {
+        x: mNames,
+        y: mGrowth,
+        type: 'bar',
+        marker: {
+            color: mGrowth.map(g => g >= 0 ? '#10B981' : '#EF4444')
+        },
+        text: mGrowth.map(g => (g > 0 ? '+' : '') + g.toFixed(1) + '%'),
+        textposition: 'auto'
+    };
+    const growthLayout = {
+        margin: { t: 20, r: 20, l: 40, b: 40 },
+        yaxis: { title: 'MoM %', gridcolor: '#F1F5F9' },
+        plot_bgcolor: '#FFFFFF',
+        paper_bgcolor: '#FFFFFF',
+    };
+    Plotly.newPlot('chart-mom-growth', [traceGrowth], growthLayout, { responsive: true, displayModeBar: false });
+</script>
+{% endblock %}

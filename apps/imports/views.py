@@ -75,7 +75,7 @@ def column_mapping_view(request, batch_id):
     sheet_name = batch.sheet_name
 
     try:
-        preview_data = ExcelImportService.get_sheet_preview(file_path, sheet_name, max_rows=50)
+        preview_data = ExcelImportService.get_sheet_preview(file_path, sheet_name, max_rows=50, file_name=batch.file_name)
     except Exception as e:
         messages.error(request, f"Unable to preview sheet '{sheet_name}': {str(e)}")
         return redirect('imports:upload')
@@ -127,6 +127,7 @@ def column_mapping_view(request, batch_id):
         'raw_columns': preview_data['raw_columns'],
         'preview_rows': preview_data['rows'][:20],
         'suggested_mapping': preview_data['suggested_mapping'],
+        'detected_month': preview_data.get('detected_month', 'Apr`26'),
         'canonical_fields': CANONICAL_FIELD_CANDIDATES,
         'duplicate_batch': duplicate_batch,
     })

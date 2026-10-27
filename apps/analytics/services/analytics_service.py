@@ -638,15 +638,32 @@ class AnalyticsService:
             df = None
 
         if df is not None:
-            excel_rows = len(df)
             col_map = import_batch.column_mapping or {}
+            d_col = col_map.get('dealer_code')
+            rm_col = col_map.get('rm')
+            f_col = col_map.get('firm_name')
+
+            # Filter out blank rows and summary footer rows where all primary identifiers are blank
+            valid_mask = []
+            for _, r in df.iterrows():
+                d_val = str(r.get(d_col, '') or '').strip() if d_col and d_col in df.columns else ''
+                rm_val = str(r.get(rm_col, '') or '').strip() if rm_col and rm_col in df.columns else ''
+                f_val = str(r.get(f_col, '') or '').strip() if f_col and f_col in df.columns else ''
+                if (not d_val or d_val.lower() == 'nan') and (not rm_val or rm_val.lower() == 'nan') and (not f_val or f_val.lower() == 'nan'):
+                    valid_mask.append(False)
+                else:
+                    valid_mask.append(True)
+
+            df_data = df[valid_mask] if (valid_mask and any(valid_mask)) else df
+            excel_rows = len(df_data)
+
             b_col = col_map.get('billing_amount')
             p_col = col_map.get('amount_paid')
             s_col = col_map.get('story_amount')
 
-            excel_billing = safe_series_decimal_sum(df[b_col]) if b_col and b_col in df.columns else Decimal('0.00')
-            excel_paid = safe_series_decimal_sum(df[p_col]) if p_col and p_col in df.columns else Decimal('0.00')
-            excel_story = safe_series_decimal_sum(df[s_col]) if s_col and s_col in df.columns else Decimal('0.00')
+            excel_billing = safe_series_decimal_sum(df_data[b_col]) if b_col and b_col in df_data.columns else Decimal('0.00')
+            excel_paid = safe_series_decimal_sum(df_data[p_col]) if p_col and p_col in df_data.columns else Decimal('0.00')
+            excel_story = safe_series_decimal_sum(df_data[s_col]) if s_col and s_col in df_data.columns else Decimal('0.00')
         else:
             excel_rows = import_batch.total_source_rows or 0
             excel_billing = import_batch.total_billing_amount or Decimal('0.00')

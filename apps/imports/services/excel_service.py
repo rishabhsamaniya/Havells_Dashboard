@@ -15,26 +15,69 @@ from apps.core.models import AuditLog, MetricDefinition
 
 CANONICAL_FIELD_CANDIDATES = {
     'month_label': ['months', 'month', 'billing month', 'month name', 'period'],
-    'dealer_code': ['dealer code', 'dealercode', 'dms code', 'dealer id', 'code', 'party code'],
+    'dealer_code': ['dealer code', 'dealercode', 'dms code', 'dealer id', 'party code', 'code'],
     'firm_name': ['firm name', 'firmname', 'agency name', 'party name', 'dealer firm name', 'company name'],
-    'dealer_name': ['dealer/partner name', 'partner name', 'dealer name', 'proprietor name'],
+    'dealer_name': ['dealer/partner name', 'partner name', 'dealer name', 'proprietor name', 'partner'],
     'raw_category': [
-        'dine-out/salon/spa/\nphotoshoot/concert',
         'dine-out/salon/spa/photoshoot/concert',
+        'dine-out/salon/spa/\nphotoshoot/concert',
         'experience category',
         'category',
         'experience',
         'service category'
     ],
-    'rm': ['rm', 'relationship manager', 'rm name', 'manager'],
+    'rm': ['rm', 'relationship manager', 'rm name', 'rm_name'],
     'payment_spoc': ['payment spoc', 'spoc', 'payment_spoc', 'payment spoc name'],
     'billing_amount': ['billing amount', 'billingamt', 'billing', 'bill amount', 'invoice amount', 'client budget'],
-    'amount_paid': ['amount paid', 'paid amount', 'amountpaid', 'payment', 'total paid'],
+    'amount_paid': ['amount paid', 'paid amount', 'amountpaid', 'paid amt', 'net paid', 'total paid'],
     'story_amount': ['story', 'story amount', 'story margin', 'story value', 'story billing'],
     'invoice_number': ['invoice number', 'invoice no', 'invoice', 'bill no', 'inv no'],
-    'city_state': ['city & state', 'city / state', 'city', 'state', 'location'],
-    'venue_name': ['hotel/restaurant/salon/photoshoot/Concert name', 'hotel/restaurant/salon/photoshoot/concert name', 'venue', 'vendor name', 'outlet']
+    'city_state': ['city & state', 'city / state', 'city state', 'city', 'location'],
+    'venue_name': ['hotel/restaurant/salon/photoshoot/concert name', 'venue', 'vendor name', 'outlet']
 }
+
+MONTH_MAP = {
+    'jan': (1, 'Jan'), 'feb': (2, 'Feb'), 'mar': (3, 'Mar'), 'apr': (4, 'Apr'),
+    'may': (5, 'May'), 'jun': (6, 'Jun'), 'jul': (7, 'Jul'), 'aug': (8, 'Aug'),
+    'sep': (9, 'Sep'), 'oct': (10, 'Oct'), 'nov': (11, 'Nov'), 'dec': (12, 'Dec')
+}
+
+def clean_alpha(s):
+    if s is None:
+        return ''
+    return re.sub(r'[^a-z0-9]', '', str(s).lower())
+
+def detect_month_from_context(sheet_name='', file_name='', row_dict=None):
+    """
+    Infers month label (e.g. Apr`26) when the sheet has no explicit Months column.
+    Checks row date values, sheet name, and file name.
+    """
+    # 1. Check date values in row if provided
+    if row_dict:
+        for k, v in row_dict.items():
+            if v is not None and not pd.isna(v) and any(d_word in str(k).lower() for d_word in ('date', 'avail', 'payment')):
+                try:
+                    dt = None
+                    if isinstance(v, (datetime, date, pd.Timestamp)):
+                        dt = v
+                    else:
+                        dt = pd.to_datetime(v, errors='coerce')
+                    if dt is not None and not pd.isna(dt):
+                        m_abbr = dt.strftime('%b')
+                        yr_abbr = dt.strftime('%y')
+                        return f"{m_abbr}`{yr_abbr}"
+                except Exception:
+                    pass
+
+    # 2. Check sheet name and file name
+    combined_text = f"{sheet_name} {file_name}".lower()
+    for m_key, (m_num, m_abbr) in MONTH_MAP.items():
+        if re.search(r'\b' + m_key, combined_text):
+            yr_match = re.search(r'20(\d{2})|(?<=\D)(\d{2})(?=\D|$)', combined_text)
+            yr_str = yr_match.group(1) or yr_match.group(2) if yr_match else '26'
+            return f"{m_abbr}`{yr_str}"
+
+    return "Apr`26"
 
 def clean_header_name(header):
     if header is None:
@@ -171,7 +214,7 @@ class ExcelImportService:
         return sheet_info
 
     @staticmethod
-    def get_sheet_preview(file_path, sheet_name, max_rows=50):
+    def get_sheet_preview(file_path, sheet_name, max_rows=50, file_name=''):
         """
         Returns headers and first 50 rows for user preview & column mapping confirmation
         """
@@ -179,27 +222,51 @@ class ExcelImportService:
         headers = [clean_header_name(col) for col in df.columns]
         rows = df.fillna('').values.tolist()
         
-        # Build initial auto-mapping suggestion
+        # Build initial auto-mapping suggestion using 2-pass matching
         mapping_suggestions = {}
+        assigned_cols = set()
+
+        # Pass 1: Exact normalized alphanumeric match
         for canonical, candidates in CANONICAL_FIELD_CANDIDATES.items():
-            matched_header = None
             for raw_col in df.columns:
-                cleaned_col = clean_header_name(raw_col).lower()
+                if raw_col in assigned_cols:
+                    continue
+                col_norm = clean_alpha(raw_col)
                 for cand in candidates:
-                    if cand.lower() == cleaned_col or cand.lower() in cleaned_col:
-                        matched_header = raw_col
+                    if clean_alpha(cand) == col_norm:
+                        mapping_suggestions[canonical] = raw_col
+                        assigned_cols.add(raw_col)
                         break
-                if matched_header:
+                if canonical in mapping_suggestions:
                     break
-            if matched_header:
-                mapping_suggestions[canonical] = matched_header
+
+        # Pass 2: Word boundary regex match for remaining unmatched fields
+        for canonical, candidates in CANONICAL_FIELD_CANDIDATES.items():
+            if canonical in mapping_suggestions:
+                continue
+            for raw_col in df.columns:
+                if raw_col in assigned_cols:
+                    continue
+                col_clean = str(raw_col).lower()
+                for cand in candidates:
+                    cand_clean = cand.lower().strip()
+                    pattern = r'(?:^|[\s/_\-])' + re.escape(cand_clean) + r'(?:$|[\s/_\-])'
+                    if re.search(pattern, col_clean):
+                        mapping_suggestions[canonical] = raw_col
+                        assigned_cols.add(raw_col)
+                        break
+                if canonical in mapping_suggestions:
+                    break
+
+        detected_month = detect_month_from_context(sheet_name=sheet_name, file_name=file_name)
 
         return {
             'headers': headers,
             'raw_columns': df.columns.tolist(),
             'rows': rows,
             'total_preview_rows': len(rows),
-            'suggested_mapping': mapping_suggestions
+            'suggested_mapping': mapping_suggestions,
+            'detected_month': detected_month,
         }
 
     @staticmethod
@@ -295,6 +362,12 @@ class ExcelImportService:
                 raw_cat_val = str(get_val('raw_category') or '').strip()
                 spoc_val = str(get_val('payment_spoc') or '').strip()
 
+                # Filter out blank rows or Excel summary / total footer rows
+                if (not rm_val or rm_val.lower() == 'nan') and (not dealer_code_val or dealer_code_val.lower() == 'nan') and (not firm_name_val or firm_name_val.lower() == 'nan'):
+                    row_text = ' '.join(str(v).lower() for v in row_dict.values() if pd.notna(v))
+                    if 'total' in row_text or 'grand' in row_text or 'sum' in row_text or index >= len(df) - 5:
+                        continue
+
                 if not rm_val or not dealer_code_val:
                     rejection_reason = "Missing mandatory identifier: "
                     missing = []
@@ -325,6 +398,14 @@ class ExcelImportService:
                     ))
                     rejected_count += 1
                     continue
+
+                # Auto-detect month_label if not provided or empty
+                if not month_label_val or month_label_val.lower() in ('nan', 'none', ''):
+                    month_label_val = detect_month_from_context(
+                        sheet_name=sheet_name,
+                        file_name=import_batch.file_name,
+                        row_dict=row_dict
+                    )
 
                 # Handle date & financial year
                 trans_date, fy = parse_month_date(month_label_val)

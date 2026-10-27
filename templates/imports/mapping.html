@@ -87,14 +87,14 @@
         <div class="row g-3 mb-4">
             <!-- Month Label -->
             <div class="col-md-4">
-                <label class="form-label small fw-bold">Month / Period <span class="text-danger">*</span></label>
-                <select name="map_month_label" class="form-select form-select-sm" required>
-                    <option value="__ignore__">-- Not Present --</option>
+                <label class="form-label small fw-bold">Month / Period</label>
+                <select name="map_month_label" class="form-select form-select-sm">
+                    <option value="__ignore__">-- Not Present (Auto-detect: {{ detected_month|default:"Apr`26" }}) --</option>
                     {% for col in raw_columns %}
                     <option value="{{ col }}" {% if suggested_mapping.month_label == col %}selected{% endif %}>{{ col }}</option>
                     {% endfor %}
                 </select>
-                <div class="form-text small">e.g. Apr`26, Months</div>
+                <div class="form-text small">e.g. Apr`26, Months (or auto-detected from sheet / dates)</div>
             </div>
 
             <!-- Dealer Code -->

@@ -85,9 +85,91 @@ class UserProfile(models.Model):
         return f"{self.user.username} ({role_name})"
 
 
+class AppModule(models.Model):
+    """
+    Centralized, database-backed registry of all sidebar application modules.
+    """
+    code = models.CharField(max_length=50, unique=True, db_index=True)
+    name = models.CharField(max_length=100)
+    group = models.CharField(max_length=100)
+    icon = models.CharField(max_length=50, default='bi-app')
+    url_name = models.CharField(max_length=100, blank=True)
+    supported_actions = models.JSONField(default=list, help_text="List of applicable actions e.g. ['view', 'upload', 'export']")
+    order = models.IntegerField(default=0)
+    is_active = models.BooleanField(default=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ['order', 'name']
+        verbose_name = 'Application Module'
+        verbose_name_plural = 'Application Modules'
+
+    def __str__(self):
+        return f"{self.name} ({self.group})"
+
+
+class RolePermission(models.Model):
+    """
+    Role-level default permissions configured per module.
+    """
+    role = models.ForeignKey(Role, on_delete=models.CASCADE, related_name='role_permissions')
+    module = models.ForeignKey(AppModule, on_delete=models.CASCADE, related_name='role_permissions')
+
+    can_view = models.BooleanField(default=False)
+    can_add = models.BooleanField(default=False)
+    can_edit = models.BooleanField(default=False)
+    can_delete = models.BooleanField(default=False)
+    can_upload = models.BooleanField(default=False)
+    can_export = models.BooleanField(default=False)
+    can_manage = models.BooleanField(default=False)
+
+    class Meta:
+        unique_together = ('role', 'module')
+        verbose_name = 'Role Default Permission'
+        verbose_name_plural = 'Role Default Permissions'
+
+    def __str__(self):
+        return f"{self.role.name} - {self.module.name}"
+
+
+class UserPermissionOverride(models.Model):
+    """
+    Explicit user-level overrides over role defaults.
+    Each action can be:
+      - INHERIT: Follow role default
+      - ALLOW: Explicitly grant permission
+      - DENY: Explicitly block permission
+    """
+    OVERRIDE_CHOICES = [
+        ('INHERIT', 'Inherit Role Default'),
+        ('ALLOW', 'Explicitly Allow (Grant)'),
+        ('DENY', 'Explicitly Deny (Block)'),
+    ]
+
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='permission_overrides')
+    module = models.ForeignKey(AppModule, on_delete=models.CASCADE, related_name='user_overrides')
+
+    view_override = models.CharField(max_length=10, choices=OVERRIDE_CHOICES, default='INHERIT')
+    add_override = models.CharField(max_length=10, choices=OVERRIDE_CHOICES, default='INHERIT')
+    edit_override = models.CharField(max_length=10, choices=OVERRIDE_CHOICES, default='INHERIT')
+    delete_override = models.CharField(max_length=10, choices=OVERRIDE_CHOICES, default='INHERIT')
+    upload_override = models.CharField(max_length=10, choices=OVERRIDE_CHOICES, default='INHERIT')
+    export_override = models.CharField(max_length=10, choices=OVERRIDE_CHOICES, default='INHERIT')
+    manage_override = models.CharField(max_length=10, choices=OVERRIDE_CHOICES, default='INHERIT')
+
+    class Meta:
+        unique_together = ('user', 'module')
+        verbose_name = 'User Permission Override'
+        verbose_name_plural = 'User Permission Overrides'
+
+    def __str__(self):
+        return f"Override: {self.user.username} - {self.module.name}"
+
+
 class ModulePermission(models.Model):
     """
-    Granular permission record associated either with a Role template or a User override.
+    Legacy granular permission record maintained for backward compatibility.
     """
     role = models.ForeignKey(Role, on_delete=models.CASCADE, null=True, blank=True, related_name='permissions')
     user = models.ForeignKey(User, on_delete=models.CASCADE, null=True, blank=True, related_name='custom_permissions')

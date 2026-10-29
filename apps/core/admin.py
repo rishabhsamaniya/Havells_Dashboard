@@ -1,11 +1,20 @@
 from django.contrib import admin
+from django.contrib import messages
 from django.contrib.auth.admin import UserAdmin as BaseUserAdmin
 from django.contrib.auth.models import User
+from django.urls import path, reverse
+from django.utils.html import format_html
+from django.shortcuts import render, redirect, get_object_or_404
 
 from apps.core.models import (
     AuditLog, MetricDefinition, MonthlyRMTarget,
-    Role, UserProfile, ModulePermission
+    Role, UserProfile, AppModule, RolePermission, UserPermissionOverride
 )
+from apps.core.permissions import get_user_effective_permissions, clear_user_permission_cache
+
+# ==========================================
+# INLINES
+# ==========================================
 
 class UserProfileInline(admin.StackedInline):
     model = UserProfile
@@ -13,46 +22,324 @@ class UserProfileInline(admin.StackedInline):
     verbose_name_plural = 'Profile & RBAC Role'
     fk_name = 'user'
     extra = 0
+    fields = ('role', 'department', 'phone')
 
-class ModulePermissionInline(admin.TabularInline):
-    model = ModulePermission
+
+class RolePermissionInline(admin.TabularInline):
+    model = RolePermission
     extra = 0
-    fields = ('module_code', 'can_view', 'can_add', 'can_edit', 'can_delete', 'can_upload', 'can_export', 'can_manage')
+    fields = ('module', 'can_view', 'can_add', 'can_edit', 'can_delete', 'can_upload', 'can_export', 'can_manage')
+    autocomplete_fields = ('module',)
 
-class CustomUserAdmin(BaseUserAdmin):
-    inlines = (UserProfileInline, ModulePermissionInline)
-    list_display = ('username', 'email', 'first_name', 'last_name', 'get_role', 'is_active', 'is_staff', 'is_superuser')
-    list_filter = ('is_active', 'is_staff', 'is_superuser', 'profile__role')
 
-    def get_role(self, obj):
-        return obj.profile.role.name if hasattr(obj, 'profile') and obj.profile.role else ('Super Admin' if obj.is_superuser else '-')
-    get_role.short_description = 'RBAC Role'
+class UserPermissionOverrideInline(admin.TabularInline):
+    model = UserPermissionOverride
+    extra = 0
+    fields = ('module', 'view_override', 'add_override', 'edit_override', 'delete_override', 'upload_override', 'export_override', 'manage_override')
+    autocomplete_fields = ('module',)
 
-admin.site.unregister(User)
-admin.site.register(User, CustomUserAdmin)
+
+# ==========================================
+# APP MODULE ADMIN
+# ==========================================
+
+@admin.register(AppModule)
+class AppModuleAdmin(admin.ModelAdmin):
+    list_display = ('code', 'name', 'group', 'order', 'icon', 'url_name', 'is_active')
+    list_display_links = ('code', 'name')
+    list_editable = ('order', 'is_active')
+    list_filter = ('group', 'is_active')
+    search_fields = ('name', 'code', 'group')
+    ordering = ('order', 'name')
+
+
+# ==========================================
+# ROLE ADMIN WITH DYNAMIC MATRIX
+# ==========================================
 
 @admin.register(Role)
 class RoleAdmin(admin.ModelAdmin):
-    list_display = ('name', 'code', 'is_system_role', 'user_count')
+    list_display = ('name', 'code', 'is_system_role', 'user_count', 'permissions_matrix_link')
     list_filter = ('is_system_role',)
     search_fields = ('name', 'code', 'description')
-    inlines = [ModulePermissionInline]
+    inlines = [RolePermissionInline]
 
     def user_count(self, obj):
         return obj.users.count()
     user_count.short_description = 'Assigned Users'
 
+    def permissions_matrix_link(self, obj):
+        url = reverse('admin:core_role_matrix', args=[obj.id])
+        return format_html('<a class="button" style="background:#417690; color:#fff; font-weight:600;" href="{}">Configure Matrix</a>', url)
+    permissions_matrix_link.short_description = 'Permissions Matrix'
+
+    def get_urls(self):
+        urls = super().get_urls()
+        custom_urls = [
+            path('<int:role_id>/matrix/', self.admin_site.admin_view(self.role_matrix_view), name='core_role_matrix'),
+        ]
+        return custom_urls + urls
+
+    def role_matrix_view(self, request, role_id):
+        role = get_object_or_404(Role, id=role_id)
+        modules = list(AppModule.objects.filter(is_active=True).order_by('order'))
+        action_names = ['can_view', 'can_add', 'can_edit', 'can_delete', 'can_upload', 'can_export', 'can_manage']
+
+        if request.method == 'POST':
+            for mod in modules:
+                allowed_actions = mod.supported_actions or ['view']
+                perm_kwargs = {}
+                for act in action_names:
+                    short_act = act.replace('can_', '')
+                    if short_act in allowed_actions:
+                        perm_kwargs[act] = (request.POST.get(f"perm_{mod.code}_{act}") == 'on')
+                    else:
+                        perm_kwargs[act] = False
+
+                RolePermission.objects.update_or_create(
+                    role=role,
+                    module=mod,
+                    defaults=perm_kwargs
+                )
+
+            AuditLog.objects.create(
+                action='ROLE_UPDATE',
+                model_name='Role',
+                object_id=str(role.id),
+                user=request.user,
+                details={'role_code': role.code, 'role_name': role.name}
+            )
+            clear_user_permission_cache(request)
+            messages.success(request, f"Role default permissions for '{role.name}' were saved successfully.")
+            return redirect(reverse('admin:core_role_matrix', args=[role.id]))
+
+        # Prepare matrix data for GET
+        role_perms_map = {
+            rp.module.code: rp for rp in RolePermission.objects.filter(role=role).select_related('module')
+        }
+
+        matrix_rows = []
+        for mod in modules:
+            allowed = mod.supported_actions or ['view']
+            rp = role_perms_map.get(mod.code)
+
+            row_actions = {}
+            for act in action_names:
+                short_act = act.replace('can_', '')
+                is_allowed = short_act in allowed
+                is_checked = getattr(rp, act, False) if rp else (role.code == 'SUPER_ADMIN')
+
+                row_actions[act] = {
+                    'is_allowed': is_allowed,
+                    'is_checked': is_checked,
+                    'field_name': f"perm_{mod.code}_{act}",
+                }
+
+            matrix_rows.append({
+                'code': mod.code,
+                'name': mod.name,
+                'group': mod.group,
+                'icon': mod.icon,
+                'actions': row_actions,
+            })
+
+        context = {
+            **self.admin_site.each_context(request),
+            'role': role,
+            'matrix_rows': matrix_rows,
+            'title': f"Permissions Matrix: {role.name}",
+        }
+        return render(request, 'admin/core/role_matrix.html', context)
+
+
+# ==========================================
+# CUSTOM USER ADMIN WITH DYNAMIC OVERRIDES
+# ==========================================
+
+class CustomUserAdmin(BaseUserAdmin):
+    inlines = (UserProfileInline, UserPermissionOverrideInline)
+    list_display = ('username', 'email', 'first_name', 'last_name', 'get_role', 'is_active', 'is_superuser', 'permissions_matrix_link')
+    list_filter = ('is_active', 'is_staff', 'is_superuser', 'profile__role')
+
+    def get_role(self, obj):
+        return obj.profile.role.name if hasattr(obj, 'profile') and obj.profile.role else ('Super Admin' if obj.is_superuser else 'No Role')
+    get_role.short_description = 'RBAC Role'
+
+    def permissions_matrix_link(self, obj):
+        url = reverse('admin:core_user_matrix', args=[obj.id])
+        return format_html('<a class="button" style="background:#205067; color:#fff; font-weight:600;" href="{}">Overrides Matrix</a>', url)
+    permissions_matrix_link.short_description = 'Individual Overrides'
+
+    def get_urls(self):
+        urls = super().get_urls()
+        custom_urls = [
+            path('<int:user_id>/matrix/', self.admin_site.admin_view(self.user_matrix_view), name='core_user_matrix'),
+        ]
+        return custom_urls + urls
+
+    def user_matrix_view(self, request, user_id):
+        target_user = get_object_or_404(User.objects.select_related('profile'), id=user_id)
+        profile, _ = UserProfile.objects.get_or_create(user=target_user)
+        all_roles = Role.objects.all().order_by('name')
+        modules = list(AppModule.objects.filter(is_active=True).order_by('order'))
+        action_names = ['can_view', 'can_add', 'can_edit', 'can_delete', 'can_upload', 'can_export', 'can_manage']
+
+        if request.method == 'POST':
+            action_type = request.POST.get('action_type', 'save_overrides')
+
+            # Handle Reset to Role Defaults
+            if action_type == 'reset_defaults':
+                UserPermissionOverride.objects.filter(user=target_user).delete()
+                AuditLog.objects.create(
+                    action='PERMISSION_UPDATE',
+                    model_name='UserPermissionOverride',
+                    object_id=str(target_user.id),
+                    user=request.user,
+                    details={'action': 'RESET_TO_ROLE_DEFAULTS', 'target_user': target_user.username}
+                )
+                clear_user_permission_cache(request)
+                messages.success(request, f"All individual overrides for '{target_user.username}' were reset to role defaults.")
+                return redirect(reverse('admin:core_user_matrix', args=[target_user.id]))
+
+            # Handle Role change if submitted
+            role_id = request.POST.get('assigned_role_id')
+            if role_id:
+                new_role = Role.objects.filter(id=role_id).first()
+                if new_role and profile.role != new_role:
+                    profile.role = new_role
+                    profile.save()
+                    if new_role.code == 'SUPER_ADMIN':
+                        target_user.is_superuser = True
+                        target_user.is_staff = True
+                        target_user.save()
+
+            # Save individual overrides
+            for mod in modules:
+                allowed_actions = mod.supported_actions or ['view']
+                override_payload = {}
+                has_non_inherit = False
+
+                for act in action_names:
+                    short_act = act.replace('can_', '')
+                    field_name = f"override_{mod.code}_{act}"
+                    override_val = request.POST.get(field_name, 'INHERIT')
+
+                    if short_act in allowed_actions:
+                        override_payload[f"{short_act}_override"] = override_val
+                        if override_val != 'INHERIT':
+                            has_non_inherit = True
+                    else:
+                        override_payload[f"{short_act}_override"] = 'INHERIT'
+
+                if has_non_inherit:
+                    UserPermissionOverride.objects.update_or_create(
+                        user=target_user,
+                        module=mod,
+                        defaults=override_payload
+                    )
+                else:
+                    UserPermissionOverride.objects.filter(user=target_user, module=mod).delete()
+
+            AuditLog.objects.create(
+                action='PERMISSION_UPDATE',
+                model_name='UserPermissionOverride',
+                object_id=str(target_user.id),
+                user=request.user,
+                details={'action': 'SAVE_OVERRIDES', 'target_user': target_user.username, 'role': profile.role.name if profile.role else None}
+            )
+            clear_user_permission_cache(request)
+            messages.success(request, f"Individual permission overrides for '{target_user.username}' were saved successfully.")
+            return redirect(reverse('admin:core_user_matrix', args=[target_user.id]))
+
+        # GET: Prepare matrix data
+        role_perms_map = {}
+        if profile.role:
+            role_perms_map = {
+                rp.module.code: rp for rp in RolePermission.objects.filter(role=profile.role).select_related('module')
+            }
+
+        user_overrides_map = {
+            ov.module.code: ov for ov in UserPermissionOverride.objects.filter(user=target_user).select_related('module')
+        }
+
+        # Calculate effective permissions map
+        effective_map = get_user_effective_permissions(target_user)
+
+        matrix_rows = []
+        for mod in modules:
+            allowed = mod.supported_actions or ['view']
+            rp = role_perms_map.get(mod.code)
+            ov = user_overrides_map.get(mod.code)
+            eff_mod = effective_map.get(mod.code, {})
+
+            row_actions = {}
+            for act in action_names:
+                short_act = act.replace('can_', '')
+                is_allowed = short_act in allowed
+
+                # Role default
+                role_def = getattr(rp, act, False) if rp else (profile.role and profile.role.code == 'SUPER_ADMIN')
+                # Override value
+                current_ov = getattr(ov, f"{short_act}_override", 'INHERIT') if ov else 'INHERIT'
+                # Effective value
+                effective_val = eff_mod.get(act, False)
+
+                row_actions[act] = {
+                    'is_allowed': is_allowed,
+                    'role_default': role_def,
+                    'current_override': current_ov,
+                    'effective_value': effective_val,
+                    'field_name': f"override_{mod.code}_{act}",
+                }
+
+            matrix_rows.append({
+                'code': mod.code,
+                'name': mod.name,
+                'group': mod.group,
+                'icon': mod.icon,
+                'actions': row_actions,
+            })
+
+        context = {
+            **self.admin_site.each_context(request),
+            'target_user': target_user,
+            'profile': profile,
+            'all_roles': all_roles,
+            'user_role_name': profile.role.name if profile.role else ('Super Admin' if target_user.is_superuser else 'No Role'),
+            'matrix_rows': matrix_rows,
+            'title': f"Permission Overrides: {target_user.username}",
+        }
+        return render(request, 'admin/core/user_matrix.html', context)
+
+
+admin.site.unregister(User)
+admin.site.register(User, CustomUserAdmin)
+
+
+# ==========================================
+# OTHER CORE ADMIN REGISTRATIONS
+# ==========================================
+
+@admin.register(RolePermission)
+class RolePermissionAdmin(admin.ModelAdmin):
+    list_display = ('role', 'module', 'can_view', 'can_add', 'can_edit', 'can_delete', 'can_upload', 'can_export', 'can_manage')
+    list_filter = ('role', 'module__group', 'can_view', 'can_upload', 'can_export')
+    search_fields = ('role__name', 'module__name', 'module__code')
+
+
+@admin.register(UserPermissionOverride)
+class UserPermissionOverrideAdmin(admin.ModelAdmin):
+    list_display = ('user', 'module', 'view_override', 'add_override', 'edit_override', 'upload_override', 'export_override', 'manage_override')
+    list_filter = ('view_override', 'upload_override', 'export_override', 'module__group')
+    search_fields = ('user__username', 'module__name', 'module__code')
+
+
 @admin.register(UserProfile)
 class UserProfileAdmin(admin.ModelAdmin):
-    list_display = ('user', 'role', 'department', 'phone', 'use_custom_permissions')
-    list_filter = ('role', 'use_custom_permissions')
+    list_display = ('user', 'role', 'department', 'phone')
+    list_filter = ('role',)
     search_fields = ('user__username', 'department', 'phone')
 
-@admin.register(ModulePermission)
-class ModulePermissionAdmin(admin.ModelAdmin):
-    list_display = ('module_code', 'role', 'user', 'can_view', 'can_add', 'can_edit', 'can_delete', 'can_upload', 'can_export', 'can_manage')
-    list_filter = ('module_code', 'role', 'can_view', 'can_upload', 'can_export')
-    search_fields = ('module_code', 'user__username', 'role__name')
 
 @admin.register(AuditLog)
 class AuditLogAdmin(admin.ModelAdmin):
@@ -60,9 +347,11 @@ class AuditLogAdmin(admin.ModelAdmin):
     list_filter = ('action', 'timestamp')
     readonly_fields = ('action', 'model_name', 'object_id', 'user', 'timestamp', 'ip_address', 'details')
 
+
 @admin.register(MetricDefinition)
 class MetricDefinitionAdmin(admin.ModelAdmin):
     list_display = ('name', 'code', 'formula_type', 'is_active', 'updated_at')
+
 
 @admin.register(MonthlyRMTarget)
 class MonthlyRMTargetAdmin(admin.ModelAdmin):

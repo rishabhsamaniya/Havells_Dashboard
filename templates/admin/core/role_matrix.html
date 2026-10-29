@@ -1,0 +1,147 @@
+{% extends "admin/base_site.html" %}
+{% load static %}
+
+{% block extrahead %}
+{{ block.super }}
+<style>
+    .matrix-container { margin: 20px 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
+    .matrix-card { background: #fff; border: 1px solid #ccc; border-radius: 6px; padding: 20px; margin-bottom: 20px; box-shadow: 0 1px 3px rgba(0,0,0,0.08); }
+    .matrix-header { display: flex; justify-content: space-between; align-items: center; border-bottom: 2px solid #79aec8; padding-bottom: 12px; margin-bottom: 15px; }
+    .matrix-title { font-size: 1.4rem; font-weight: 600; color: #333; margin: 0; }
+    .matrix-desc { color: #666; font-size: 0.9rem; margin-top: 4px; }
+    .matrix-toolbar { display: flex; justify-content: space-between; align-items: center; background: #f8f9fa; border: 1px solid #e9ecef; border-radius: 4px; padding: 10px 15px; margin-bottom: 15px; }
+    .toolbar-actions { display: flex; gap: 8px; }
+    .btn-act { padding: 6px 14px; font-size: 0.85rem; font-weight: 600; border-radius: 4px; cursor: pointer; border: 1px solid #ccc; background: #fff; text-decoration: none; display: inline-block; }
+    .btn-act:hover { background: #f0f0f0; }
+    .btn-act-primary { background: #417690; color: #fff; border-color: #417690; }
+    .btn-act-primary:hover { background: #205067; color: #fff; }
+    .matrix-table { width: 100%; border-collapse: collapse; margin-top: 10px; }
+    .matrix-table th, .matrix-table td { padding: 10px 12px; border: 1px solid #ddd; text-align: center; }
+    .matrix-table th.col-mod, .matrix-table td.col-mod { text-align: left; }
+    .matrix-table thead th { background: #f4f6f8; font-weight: 600; font-size: 0.85rem; text-transform: uppercase; color: #444; }
+    .group-header-row td { background: #e9ecef; font-weight: bold; font-size: 0.95rem; text-align: left; color: #205067; padding: 8px 12px; }
+    .module-name { font-weight: 600; color: #222; font-size: 0.95rem; }
+    .module-code { font-size: 0.8rem; color: #777; font-family: monospace; }
+    .inapplicable { color: #bbb; }
+    .sticky-bar { position: sticky; bottom: 0; background: #fff; border-top: 2px solid #417690; padding: 12px 20px; display: flex; justify-content: space-between; align-items: center; box-shadow: 0 -2px 6px rgba(0,0,0,0.06); }
+</style>
+{% endblock %}
+
+{% block breadcrumbs %}
+<div class="breadcrumbs">
+    <a href="{% url 'admin:index' %}">Home</a>
+    &rsaquo; <a href="{% url 'admin:app_list' app_label='core' %}">Core</a>
+    &rsaquo; <a href="{% url 'admin:core_role_changelist' %}">Roles</a>
+    &rsaquo; <a href="{% url 'admin:core_role_change' role.id %}">{{ role.name }}</a>
+    &rsaquo; Permissions Matrix
+</div>
+{% endblock %}
+
+{% block content %}
+<div class="matrix-container">
+    <div class="matrix-card">
+        <div class="matrix-header">
+            <div>
+                <h1 class="matrix-title">Role Default Permissions: {{ role.name }}</h1>
+                <div class="matrix-desc">Configure default module permissions for role <code>{{ role.code }}</code>. All users assigned this role will inherit these permissions unless individually overridden.</div>
+            </div>
+            <div>
+                <span class="btn-act" style="cursor: default;">Assigned Users: <strong>{{ role.users.count }}</strong></span>
+            </div>
+        </div>
+
+        <form method="POST">
+            {% csrf_token %}
+
+            <div class="matrix-toolbar">
+                <div class="toolbar-actions">
+                    <button type="button" class="btn-act" onclick="setAll(true)">Select All</button>
+                    <button type="button" class="btn-act" onclick="setAll(false)">Deselect All</button>
+                    <button type="button" class="btn-act" onclick="setViewOnly()">View Only (All)</button>
+                </div>
+                <div>
+                    <input type="text" id="filterInput" placeholder="Filter module name..." style="padding: 5px 10px; border: 1px solid #ccc; border-radius: 4px; width: 220px;" onkeyup="filterModules()">
+                </div>
+            </div>
+
+            <table class="matrix-table" id="rolesMatrixTable">
+                <thead>
+                    <tr>
+                        <th class="col-mod" style="width: 300px;">Application Module</th>
+                        <th style="width: 90px;">View</th>
+                        <th style="width: 90px;">Add</th>
+                        <th style="width: 90px;">Edit</th>
+                        <th style="width: 90px;">Delete</th>
+                        <th style="width: 90px;">Upload</th>
+                        <th style="width: 90px;">Export</th>
+                        <th style="width: 90px;">Manage</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% regroup matrix_rows by group as grouped_rows %}
+                    {% for grp in grouped_rows %}
+                    <tr class="group-header-row">
+                        <td colspan="8">
+                            <div style="display: flex; justify-content: space-between; align-items: center;">
+                                <span>📁 {{ grp.grouper }}</span>
+                                <span style="font-size: 0.8rem; font-weight: normal;">
+                                    <a href="javascript:void(0)" onclick="setGroup('{{ forloop.counter }}', true)" style="color: #417690; margin-right: 8px;">Select Group</a>
+                                    <a href="javascript:void(0)" onclick="setGroup('{{ forloop.counter }}', false)" style="color: #666;">Clear Group</a>
+                                </span>
+                            </div>
+                        </td>
+                    </tr>
+                    {% for row in grp.list %}
+                    <tr class="mod-row group-{{ forloop.parentloop.counter }}">
+                        <td class="col-mod">
+                            <div class="module-name">{{ row.name }}</div>
+                            <div class="module-code">{{ row.code }}</div>
+                        </td>
+
+                        {% for act_name, act_data in row.actions.items %}
+                        <td>
+                            {% if act_data.is_allowed %}
+                            <input type="checkbox" name="{{ act_data.field_name }}" class="perm-cb perm-{{ act_name }}" {% if act_data.is_checked %}checked{% endif %}>
+                            {% else %}
+                            <span class="inapplicable">—</span>
+                            {% endif %}
+                        </td>
+                        {% endfor %}
+                    </tr>
+                    {% endfor %}
+                    {% endfor %}
+                </tbody>
+            </table>
+
+            <div class="sticky-bar">
+                <div>
+                    <a href="{% url 'admin:core_role_changelist' %}" class="btn-act">&larr; Return to Roles</a>
+                </div>
+                <div>
+                    <button type="submit" class="btn-act btn-act-primary" style="padding: 8px 24px; font-size: 1rem;">Save Role Defaults</button>
+                </div>
+            </div>
+        </form>
+    </div>
+</div>
+
+<script>
+    function setAll(val) {
+        document.querySelectorAll('.perm-cb').forEach(cb => cb.checked = val);
+    }
+    function setViewOnly() {
+        document.querySelectorAll('.perm-cb').forEach(cb => cb.checked = false);
+        document.querySelectorAll('.perm-can_view').forEach(cb => cb.checked = true);
+    }
+    function setGroup(grpIndex, val) {
+        document.querySelectorAll('.group-' + grpIndex + ' .perm-cb').forEach(cb => cb.checked = val);
+    }
+    function filterModules() {
+        const query = document.getElementById('filterInput').value.toLowerCase();
+        document.querySelectorAll('.mod-row').forEach(row => {
+            const name = row.querySelector('.module-name').innerText.toLowerCase();
+            row.style.display = name.includes(query) ? '' : 'none';
+        });
+    }
+</script>
+{% endblock %}

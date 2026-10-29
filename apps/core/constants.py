@@ -254,5 +254,11 @@ DEFAULT_ROLE_TEMPLATES = {
             'transactions': {'can_view': True, 'can_export': True},
             'export': {'can_view': True, 'can_export': True},
         }
+    },
+    'CUSTOM_USER': {
+        'name': 'Custom User',
+        'description': 'Flexible baseline role with no automatic business module access. Permissions are granted or denied manually by the Super Admin.',
+        'is_system_role': True,
+        'modules': {}
     }
 }

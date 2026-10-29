@@ -13,6 +13,15 @@
             <h3 class="fw-bold text-dark mb-0">{{ page_title }}</h3>
         </div>
         <div class="d-flex gap-2">
+            {% if mode == 'user' %}
+            <form method="POST" style="display: inline;" onsubmit="return confirm('Reset all individual overrides for this user? They will revert to 100% role defaults.');">
+                {% csrf_token %}
+                <input type="hidden" name="action_type" value="reset_defaults">
+                <button type="submit" class="btn btn-outline-danger px-3">
+                    <i class="bi bi-arrow-counterclockwise me-1"></i> Reset to Role Defaults
+                </button>
+            </form>
+            {% endif %}
             <a href="{% url 'core:rbac_dashboard' %}" class="btn btn-outline-secondary px-3">
                 Cancel
             </a>
@@ -25,41 +34,44 @@
     
     <div class="d-flex align-items-center gap-3 text-muted small">
         {% if mode == 'user' %}
-        <span>Configuring User: <strong class="text-dark">{{ target_user.get_full_name|default:target_user.username }} (@{{ target_user.username }})</strong></span>
+        <span>User: <strong class="text-dark">{{ target_user.get_full_name|default:target_user.username }} (@{{ target_user.username }})</strong></span>
         <span>•</span>
-        <span>Current Role Template: <span class="badge bg-primary-subtle text-primary border border-primary-subtle">{{ profile.role.name|default:"None" }}</span></span>
+        <span>Assigned Role: <span class="badge bg-primary-subtle text-primary border border-primary-subtle">{{ profile.role.name|default:"None" }}</span></span>
+        {% if target_user.is_superuser %}
+        <span>•</span>
+        <span class="badge bg-danger-subtle text-danger border border-danger-subtle"><i class="bi bi-shield-shaded me-1"></i>Super Admin (Unrestricted Full Access)</span>
+        {% endif %}
         {% else %}
         <span>Configuring Role Template: <strong class="text-dark">{{ role.name }} ({{ role.code }})</strong></span>
         <span>•</span>
-        <span>Type: <span class="badge bg-secondary-subtle text-secondary">{% if role.is_system_role %}System Default{% else %}Custom Role{% endif %}</span></span>
+        <span>Type: <span class="badge bg-secondary-subtle text-secondary">{% if role.is_system_role %}System Predefined{% else %}Custom Role{% endif %}</span></span>
         {% endif %}
     </div>
 </div>
 
 <form method="POST" id="rbacMatrixForm">
     {% csrf_token %}
+    <input type="hidden" name="action_type" value="save_overrides">
 
     {% if mode == 'user' %}
-    <!-- Custom Permissions Toggle Card -->
-    <div class="card border-0 shadow-sm p-4 mb-4">
+    <!-- Role Selector Card -->
+    <div class="card border-0 shadow-sm p-3 mb-4 bg-light">
         <div class="d-flex flex-column flex-md-row justify-content-between align-items-md-center gap-3">
-            <div>
-                <h5 class="fw-bold text-dark mb-1">Permission Source Selection</h5>
-                <p class="text-muted small mb-0">Choose whether this user inherits permissions from their assigned role (<strong>{{ profile.role.name|default:"None" }}</strong>) or uses custom module-level permissions.</p>
+            <div class="d-flex align-items-center gap-2">
+                <label class="form-label fw-bold mb-0 small text-dark">Baseline Role Template:</label>
+                <select name="role_id" class="form-select form-select-sm w-auto fw-semibold">
+                    {% for r in roles %}
+                    <option value="{{ r.id }}" {% if profile.role.id == r.id %}selected{% endif %}>
+                        {{ r.name }} ({{ r.code }})
+                    </option>
+                    {% endfor %}
+                </select>
+                <span class="text-muted small ms-2">Changing the role updates inherited permissions for any unoverridden module.</span>
             </div>
-            <div class="d-flex align-items-center gap-3 bg-light p-2 rounded-3">
-                <div class="form-check form-switch mb-0">
-                    <input class="form-check-input" type="checkbox" role="switch" id="customPermsToggle" name="use_custom_permissions" {% if profile.use_custom_permissions %}checked{% endif %} onchange="toggleCustomPerms(this.checked)">
-                    <label class="form-check-label fw-semibold small" for="customPermsToggle">
-                        Enable Custom Granular Permissions
-                    </label>
-                </div>
-            </div>
-        </div>
-        <div id="roleInheritNotice" class="alert alert-info d-flex align-items-center gap-2 mt-3 mb-0 {% if profile.use_custom_permissions %}d-none{% endif %}">
-            <i class="bi bi-info-circle-fill fs-5"></i>
-            <div class="small">
-                This user currently inherits permissions from the <strong>{{ profile.role.name }}</strong> template. Any changes saved to that role template will automatically apply here. Switch the toggle above to override permissions specifically for this individual user.
+            <div class="small text-muted">
+                <span class="badge bg-success-subtle text-success border border-success-subtle px-2 py-1">ALLOW = Grant</span>
+                <span class="badge bg-danger-subtle text-danger border border-danger-subtle px-2 py-1 ms-1">DENY = Block</span>
+                <span class="badge bg-light text-dark border px-2 py-1 ms-1">INHERIT = Role Default</span>
             </div>
         </div>
     </div>
@@ -70,6 +82,17 @@
         <div class="card-body p-3 d-flex flex-wrap justify-content-between align-items-center gap-2">
             <div class="d-flex align-items-center gap-2">
                 <span class="fw-semibold small text-muted text-uppercase me-2">Quick Actions:</span>
+                {% if mode == 'user' %}
+                <button type="button" class="btn btn-sm btn-outline-secondary" onclick="setAllOverrides('INHERIT')">
+                    <i class="bi bi-arrow-repeat me-1"></i> Inherit All
+                </button>
+                <button type="button" class="btn btn-sm btn-outline-success" onclick="setAllOverrides('ALLOW')">
+                    <i class="bi bi-check-all me-1"></i> Grant All (ALLOW)
+                </button>
+                <button type="button" class="btn btn-sm btn-outline-danger" onclick="setAllOverrides('DENY')">
+                    <i class="bi bi-x-octagon me-1"></i> Block All (DENY)
+                </button>
+                {% else %}
                 <button type="button" class="btn btn-sm btn-outline-primary" onclick="setAllCheckboxes(true)">
                     <i class="bi bi-check-all me-1"></i> Select All
                 </button>
@@ -79,6 +102,7 @@
                 <button type="button" class="btn btn-sm btn-outline-info" onclick="setOnlyViewCheckboxes()">
                     <i class="bi bi-eye me-1"></i> View Only (All Modules)
                 </button>
+                {% endif %}
             </div>
             <div class="d-flex align-items-center gap-2">
                 <input type="text" id="matrixFilterInput" class="form-control form-control-sm" placeholder="Filter module name..." style="width: 220px;">
@@ -92,14 +116,14 @@
             <table class="table table-hover align-middle mb-0" id="matrixTable">
                 <thead class="table-light">
                     <tr class="text-muted small text-uppercase">
-                        <th class="ps-4" style="min-width: 260px;">Application Module</th>
-                        <th class="text-center" style="width: 100px;">View</th>
-                        <th class="text-center" style="width: 100px;">Add</th>
-                        <th class="text-center" style="width: 100px;">Edit</th>
-                        <th class="text-center" style="width: 100px;">Delete</th>
-                        <th class="text-center" style="width: 110px;">Upload</th>
-                        <th class="text-center" style="width: 110px;">Export</th>
-                        <th class="text-center pe-4" style="width: 110px;">Manage</th>
+                        <th class="ps-4" style="min-width: 250px;">Application Module</th>
+                        <th class="text-center" style="width: {% if mode == 'user' %}140px{% else %}100px{% endif %};">View</th>
+                        <th class="text-center" style="width: {% if mode == 'user' %}140px{% else %}100px{% endif %};">Add</th>
+                        <th class="text-center" style="width: {% if mode == 'user' %}140px{% else %}100px{% endif %};">Edit</th>
+                        <th class="text-center" style="width: {% if mode == 'user' %}140px{% else %}100px{% endif %};">Delete</th>
+                        <th class="text-center" style="width: {% if mode == 'user' %}140px{% else %}110px{% endif %};">Upload</th>
+                        <th class="text-center" style="width: {% if mode == 'user' %}140px{% else %}110px{% endif %};">Export</th>
+                        <th class="text-center pe-4" style="width: {% if mode == 'user' %}140px{% else %}110px{% endif %};">Manage</th>
                     </tr>
                 </thead>
                 <tbody>
@@ -112,11 +136,13 @@
                                 <span class="fw-bold text-dark text-uppercase small tracking-wide">
                                     <i class="bi bi-folder2-open me-2 text-primary"></i>{{ group.grouper }}
                                 </span>
+                                {% if mode == 'role' %}
                                 <div class="d-flex gap-2">
                                     <button type="button" class="btn btn-link btn-sm text-decoration-none p-0 text-muted small" onclick="toggleGroupRow('{{ forloop.counter }}', true)">Select Group</button>
                                     <span class="text-muted">•</span>
                                     <button type="button" class="btn btn-link btn-sm text-decoration-none p-0 text-muted small" onclick="toggleGroupRow('{{ forloop.counter }}', false)">Clear</button>
                                 </div>
+                                {% endif %}
                             </div>
                         </td>
                     </tr>
@@ -133,96 +159,42 @@
                             </div>
                         </td>
 
-                        <!-- View -->
-                        <td class="text-center">
-                            {% with act=row.actions.can_view %}
+                        {% for act_name, act in row.actions.items %}
+                        <td class="text-center {% if forloop.last %}pe-4{% endif %}">
                             {% if act.is_allowed %}
-                            <div class="form-check d-inline-block">
-                                <input class="form-check-input perm-checkbox perm-view" type="checkbox" name="{{ act.field_name }}" {% if act.is_checked %}checked{% endif %}>
-                            </div>
+                                {% if mode == 'user' %}
+                                <!-- User 3-state Override Selector -->
+                                <div>
+                                    <select name="{{ act.field_name }}" class="form-select form-select-sm override-select {% if act.current_override == 'ALLOW' %}border-success text-success fw-bold bg-success-subtle{% elif act.current_override == 'DENY' %}border-danger text-danger fw-bold bg-danger-subtle{% endif %}" onchange="updateOverrideStyle(this)" style="font-size: 0.78rem;">
+                                        <option value="INHERIT" {% if act.current_override == 'INHERIT' %}selected{% endif %}>
+                                            INHERIT ({% if act.role_default %}Role:YES{% else %}Role:NO{% endif %})
+                                        </option>
+                                        <option value="ALLOW" {% if act.current_override == 'ALLOW' %}selected{% endif %}>
+                                            ALLOW (Grant)
+                                        </option>
+                                        <option value="DENY" {% if act.current_override == 'DENY' %}selected{% endif %}>
+                                            DENY (Block)
+                                        </option>
+                                    </select>
+                                    <div class="small mt-1" style="font-size: 0.7rem;">
+                                        {% if act.effective_value %}
+                                        <span class="text-success fw-semibold"><i class="bi bi-check-circle-fill me-1"></i>Allowed</span>
+                                        {% else %}
+                                        <span class="text-danger fw-semibold"><i class="bi bi-x-circle-fill me-1"></i>Denied</span>
+                                        {% endif %}
+                                    </div>
+                                </div>
+                                {% else %}
+                                <!-- Role Checkbox -->
+                                <div class="form-check d-inline-block">
+                                    <input class="form-check-input perm-checkbox perm-{{ act_name }}" type="checkbox" name="{{ act.field_name }}" {% if act.is_checked %}checked{% endif %}>
+                                </div>
+                                {% endif %}
                             {% else %}
                             <span class="text-muted opacity-50">—</span>
                             {% endif %}
-                            {% endwith %}
                         </td>
-
-                        <!-- Add -->
-                        <td class="text-center">
-                            {% with act=row.actions.can_add %}
-                            {% if act.is_allowed %}
-                            <div class="form-check d-inline-block">
-                                <input class="form-check-input perm-checkbox" type="checkbox" name="{{ act.field_name }}" {% if act.is_checked %}checked{% endif %}>
-                            </div>
-                            {% else %}
-                            <span class="text-muted opacity-50">—</span>
-                            {% endif %}
-                            {% endwith %}
-                        </td>
-
-                        <!-- Edit -->
-                        <td class="text-center">
-                            {% with act=row.actions.can_edit %}
-                            {% if act.is_allowed %}
-                            <div class="form-check d-inline-block">
-                                <input class="form-check-input perm-checkbox" type="checkbox" name="{{ act.field_name }}" {% if act.is_checked %}checked{% endif %}>
-                            </div>
-                            {% else %}
-                            <span class="text-muted opacity-50">—</span>
-                            {% endif %}
-                            {% endwith %}
-                        </td>
-
-                        <!-- Delete -->
-                        <td class="text-center">
-                            {% with act=row.actions.can_delete %}
-                            {% if act.is_allowed %}
-                            <div class="form-check d-inline-block">
-                                <input class="form-check-input perm-checkbox" type="checkbox" name="{{ act.field_name }}" {% if act.is_checked %}checked{% endif %}>
-                            </div>
-                            {% else %}
-                            <span class="text-muted opacity-50">—</span>
-                            {% endif %}
-                            {% endwith %}
-                        </td>
-
-                        <!-- Upload -->
-                        <td class="text-center">
-                            {% with act=row.actions.can_upload %}
-                            {% if act.is_allowed %}
-                            <div class="form-check d-inline-block">
-                                <input class="form-check-input perm-checkbox perm-upload" type="checkbox" name="{{ act.field_name }}" {% if act.is_checked %}checked{% endif %}>
-                            </div>
-                            {% else %}
-                            <span class="text-muted opacity-50">—</span>
-                            {% endif %}
-                            {% endwith %}
-                        </td>
-
-                        <!-- Export -->
-                        <td class="text-center">
-                            {% with act=row.actions.can_export %}
-                            {% if act.is_allowed %}
-                            <div class="form-check d-inline-block">
-                                <input class="form-check-input perm-checkbox perm-export" type="checkbox" name="{{ act.field_name }}" {% if act.is_checked %}checked{% endif %}>
-                            </div>
-                            {% else %}
-                            <span class="text-muted opacity-50">—</span>
-                            {% endif %}
-                            {% endwith %}
-                        </td>
-
-                        <!-- Manage -->
-                        <td class="text-center pe-4">
-                            {% with act=row.actions.can_manage %}
-                            {% if act.is_allowed %}
-                            <div class="form-check d-inline-block">
-                                <input class="form-check-input perm-checkbox perm-manage" type="checkbox" name="{{ act.field_name }}" {% if act.is_checked %}checked{% endif %}>
-                            </div>
-                            {% else %}
-                            <span class="text-muted opacity-50">—</span>
-                            {% endif %}
-                            {% endwith %}
-                        </td>
+                        {% endfor %}
                     </tr>
                     {% endfor %}
                     {% endfor %}
@@ -249,6 +221,22 @@
 </form>
 
 <script>
+    function updateOverrideStyle(sel) {
+        sel.classList.remove('border-success', 'text-success', 'bg-success-subtle', 'border-danger', 'text-danger', 'bg-danger-subtle', 'fw-bold');
+        if (sel.value === 'ALLOW') {
+            sel.classList.add('border-success', 'text-success', 'fw-bold', 'bg-success-subtle');
+        } else if (sel.value === 'DENY') {
+            sel.classList.add('border-danger', 'text-danger', 'fw-bold', 'bg-danger-subtle');
+        }
+    }
+
+    function setAllOverrides(val) {
+        document.querySelectorAll('.override-select').forEach(sel => {
+            sel.value = val;
+            updateOverrideStyle(sel);
+        });
+    }
+
     function setAllCheckboxes(state) {
         document.querySelectorAll('.perm-checkbox').forEach(cb => {
             cb.checked = state;
@@ -259,7 +247,7 @@
         document.querySelectorAll('.perm-checkbox').forEach(cb => {
             cb.checked = false;
         });
-        document.querySelectorAll('.perm-view').forEach(cb => {
+        document.querySelectorAll('.perm-can_view').forEach(cb => {
             cb.checked = true;
         });
     }
@@ -268,13 +256,6 @@
         document.querySelectorAll('.group-item-' + groupIndex + ' .perm-checkbox').forEach(cb => {
             cb.checked = state;
         });
-    }
-
-    function toggleCustomPerms(enabled) {
-        const notice = document.getElementById('roleInheritNotice');
-        if (notice) {
-            notice.classList.toggle('d-none', enabled);
-        }
     }
 
     // Filter module rows

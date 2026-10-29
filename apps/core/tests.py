@@ -323,3 +323,11 @@ class DynamicRBACSystemTests(TestCase):
         self.assertEqual(response.status_code, 403)
         response = self.client.get(reverse('core:rbac_role_permissions', args=[self.analyst_role.pk]))
         self.assertEqual(response.status_code, 403)
+
+    def test_superadmin_can_access_rbac_role_and_user_matrix(self):
+        """Super Admin can access custom rbac_role_permissions and rbac_user_permissions views."""
+        self.client.login(username="superadmin", password="adminpassword123")
+        response = self.client.get(reverse('core:rbac_role_permissions', args=[self.analyst_role.pk]))
+        self.assertEqual(response.status_code, 200)
+        response = self.client.get(reverse('core:rbac_user_permissions', args=[self.analyst_user.pk]))
+        self.assertEqual(response.status_code, 200)

@@ -5,9 +5,14 @@ from django.contrib import messages
 from django.http import JsonResponse, HttpResponse
 from django.utils.text import slugify
 
-from apps.core.models import Role, UserProfile, ModulePermission, AuditLog, MetricDefinition, MonthlyRMTarget
+from apps.core.models import (
+    Role, UserProfile, ModulePermission, AuditLog, MetricDefinition, MonthlyRMTarget,
+    AppModule, RolePermission, UserPermissionOverride
+)
 from apps.core.constants import AVAILABLE_MODULES, MODULE_DICT, MODULE_GROUPS, DEFAULT_ROLE_TEMPLATES
-from apps.core.permissions import permission_required, has_module_perm, get_user_effective_permissions
+from apps.core.permissions import (
+    permission_required, has_module_perm, get_user_effective_permissions, clear_user_permission_cache
+)
 from apps.analytics.models import BillingTransaction
 
 User = get_user_model()
@@ -315,6 +320,7 @@ def rbac_user_permissions_view(request, user_id):
                 user=request.user,
                 details={'action': 'RESET_TO_ROLE_DEFAULTS', 'target_user': target_user.username}
             )
+            clear_user_permission_cache(request)
             messages.success(request, f"Permissions for '{target_user.username}' were reset to role defaults.")
             return redirect('core:rbac_user_permissions', user_id=target_user.id)
 
@@ -364,6 +370,7 @@ def rbac_user_permissions_view(request, user_id):
             user=request.user,
             details={'target_user': target_user.username, 'role': profile.role.name if profile.role else None}
         )
+        clear_user_permission_cache(request)
 
         messages.success(request, f"Individual permission overrides for '{target_user.username}' updated successfully.")
         return redirect('core:rbac_user_permissions', user_id=target_user.id)
@@ -458,6 +465,7 @@ def rbac_role_permissions_view(request, role_id):
             user=request.user,
             details={'role_code': role.code, 'role_name': role.name}
         )
+        clear_user_permission_cache(request)
 
         messages.success(request, f"Role template '{role.name}' default permissions updated successfully.")
         return redirect('core:rbac_role_permissions', role_id=role.id)

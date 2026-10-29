@@ -1,0 +1,94 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}{{ action_title }}{% endblock %}
+
+{% block content %}
+<div class="row justify-content-center">
+    <div class="col-md-8 col-lg-7">
+        <div class="d-flex align-items-center gap-2 mb-4">
+            <a href="{% url 'core:rbac_dashboard' %}" class="btn btn-sm btn-outline-secondary">
+                <i class="bi bi-arrow-left"></i>
+            </a>
+            <h3 class="fw-bold text-dark mb-0">{{ action_title }}</h3>
+        </div>
+
+        <div class="card border-0 shadow-sm p-4">
+            <form method="POST">
+                {% csrf_token %}
+
+                <!-- Account Credentials -->
+                <h5 class="fw-bold text-dark mb-3 border-bottom pb-2">Account Credentials</h5>
+                
+                <div class="row g-3 mb-3">
+                    <div class="col-md-6">
+                        <label class="form-label fw-semibold small">Username <span class="text-danger">*</span></label>
+                        {% if target_user %}
+                        <input type="text" class="form-control bg-light" value="{{ target_user.username }}" readonly disabled>
+                        <div class="form-text small">Username cannot be changed after creation.</div>
+                        {% else %}
+                        <input type="text" name="username" class="form-control" placeholder="e.g. rahul.sharma" required>
+                        {% endif %}
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label fw-semibold small">
+                            Password {% if not target_user %}<span class="text-danger">*</span>{% else %}(Leave blank to keep unchanged){% endif %}
+                        </label>
+                        <input type="password" name="{% if target_user %}new_password{% else %}password{% endif %}" class="form-control" placeholder="••••••••" {% if not target_user %}required{% endif %}>
+                    </div>
+                </div>
+
+                <!-- Personal Information -->
+                <h5 class="fw-bold text-dark mb-3 border-bottom pb-2 mt-4">User Details</h5>
+
+                <div class="row g-3 mb-3">
+                    <div class="col-md-6">
+                        <label class="form-label fw-semibold small">First Name</label>
+                        <input type="text" name="first_name" class="form-control" value="{{ target_user.first_name|default:'' }}" placeholder="e.g. Rahul">
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label fw-semibold small">Last Name</label>
+                        <input type="text" name="last_name" class="form-control" value="{{ target_user.last_name|default:'' }}" placeholder="e.g. Sharma">
+                    </div>
+                    <div class="col-12">
+                        <label class="form-label fw-semibold small">Email Address</label>
+                        <input type="email" name="email" class="form-control" value="{{ target_user.email|default:'' }}" placeholder="rahul.sharma@havells.com">
+                    </div>
+                </div>
+
+                <!-- Role and Organization -->
+                <h5 class="fw-bold text-dark mb-3 border-bottom pb-2 mt-4">Role Assignment & Department</h5>
+
+                <div class="row g-3 mb-4">
+                    <div class="col-md-6">
+                        <label class="form-label fw-semibold small">Assigned Role Template <span class="text-danger">*</span></label>
+                        <select name="role_id" class="form-select" required>
+                            {% for r in roles %}
+                            <option value="{{ r.id }}" {% if profile.role.id == r.id or not profile.role and r.code == 'ANALYST' %}selected{% endif %}>
+                                {{ r.name }} ({{ r.code }})
+                            </option>
+                            {% endfor %}
+                        </select>
+                        <div class="form-text small">Role template provides initial baseline permissions.</div>
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label fw-semibold small">Department</label>
+                        <input type="text" name="department" class="form-control" value="{{ profile.department|default:'' }}" placeholder="e.g. Commercial / MIS">
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label fw-semibold small">Phone Number</label>
+                        <input type="text" name="phone" class="form-control" value="{{ profile.phone|default:'' }}" placeholder="+91 9876543210">
+                    </div>
+                </div>
+
+                <div class="d-flex justify-content-end gap-2 border-top pt-3">
+                    <a href="{% url 'core:rbac_dashboard' %}" class="btn btn-outline-secondary px-4">Cancel</a>
+                    <button type="submit" class="btn btn-primary px-4 fw-semibold">
+                        <i class="bi bi-save me-1"></i> Save User
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+{% endblock %}

@@ -1,10 +1,16 @@
 from django.shortcuts import render, redirect, get_object_or_404
-from django.contrib.auth import authenticate, login, logout
+from django.contrib.auth import authenticate, login, logout, get_user_model
 from django.contrib.auth.decorators import login_required
 from django.contrib import messages
-from django.http import JsonResponse
-from apps.core.models import AuditLog, MetricDefinition, MonthlyRMTarget
+from django.http import JsonResponse, HttpResponse
+from django.utils.text import slugify
+
+from apps.core.models import Role, UserProfile, ModulePermission, AuditLog, MetricDefinition, MonthlyRMTarget
+from apps.core.constants import AVAILABLE_MODULES, MODULE_DICT, MODULE_GROUPS, DEFAULT_ROLE_TEMPLATES
+from apps.core.permissions import permission_required, has_module_perm, get_user_effective_permissions
 from apps.analytics.models import BillingTransaction
+
+User = get_user_model()
 
 def user_login(request):
     if request.user.is_authenticated:
@@ -15,6 +21,9 @@ def user_login(request):
         password = request.POST.get('password')
         user = authenticate(request, username=username, password=password)
         if user is not None:
+            if not user.is_active:
+                messages.error(request, 'Your account has been deactivated. Please contact the Super Admin.')
+                return render(request, 'core/login.html')
             login(request, user)
             AuditLog.objects.create(
                 action='LOGIN',
@@ -33,11 +42,13 @@ def user_logout(request):
     return redirect('core:login')
 
 @login_required
+@permission_required('audit', 'can_view')
 def audit_logs(request):
     logs = AuditLog.objects.select_related('user').order_by('-timestamp')[:200]
     return render(request, 'core/audit_logs.html', {'logs': logs})
 
 @login_required
+@permission_required('settings', 'can_view')
 def settings_view(request):
     metric = MetricDefinition.objects.filter(code='STORY_DEFINITION').first()
     if not metric:
@@ -54,6 +65,14 @@ def settings_view(request):
     months = list(BillingTransaction.objects.filter(import_batch__is_active=True).values_list('month_label', flat=True).distinct().order_by('month_label'))
 
     if request.method == 'POST':
+        if not has_module_perm(request.user, 'settings', 'can_edit', request):
+            return render(request, 'core/403.html', {
+                'module_code': 'settings',
+                'module_name': 'Settings & Definitions',
+                'required_action': 'can_edit',
+                'error_message': 'You do not have permission to modify settings or business metrics.'
+            }, status=403)
+
         action = request.POST.get('action')
         if action == 'update_story_metric':
             metric.formula_type = request.POST.get('formula_type', 'SOURCE_COLUMN')
@@ -97,3 +116,402 @@ def settings_view(request):
         'rms': rms,
         'months': months,
     })
+
+
+# ==========================================
+# RBAC & PERMISSION MANAGEMENT VIEWS
+# ==========================================
+
+@login_required
+@permission_required('rbac', 'can_view')
+def rbac_dashboard_view(request):
+    """
+    Overview of all Users and Role Templates with assignment stats.
+    """
+    users = User.objects.select_related('profile', 'profile__role').order_by('username')
+    roles = Role.objects.prefetch_related('permissions').all().order_by('is_system_role', 'name')
+
+    total_users = users.count()
+    active_users = users.filter(is_active=True).count()
+    total_roles = roles.count()
+    superadmins_count = users.filter(is_superuser=True).count()
+
+    return render(request, 'core/rbac_dashboard.html', {
+        'users': users,
+        'roles': roles,
+        'total_users': total_users,
+        'active_users': active_users,
+        'total_roles': total_roles,
+        'superadmins_count': superadmins_count,
+        'module_groups': MODULE_GROUPS,
+    })
+
+
+@login_required
+@permission_required('rbac', 'can_manage')
+def rbac_user_create_view(request):
+    """
+    Create a new user account and assign role & profile.
+    """
+    roles = Role.objects.all().order_by('name')
+    if request.method == 'POST':
+        username = request.POST.get('username', '').strip()
+        password = request.POST.get('password', '').strip()
+        first_name = request.POST.get('first_name', '').strip()
+        last_name = request.POST.get('last_name', '').strip()
+        email = request.POST.get('email', '').strip()
+        role_id = request.POST.get('role_id')
+        department = request.POST.get('department', '').strip()
+        phone = request.POST.get('phone', '').strip()
+
+        if not username or not password:
+            messages.error(request, 'Username and password are required.')
+            return render(request, 'core/rbac_user_form.html', {'roles': roles, 'action_title': 'Create New User'})
+
+        if User.objects.filter(username=username).exists():
+            messages.error(request, f"Username '{username}' already exists. Please choose a different username.")
+            return render(request, 'core/rbac_user_form.html', {'roles': roles, 'action_title': 'Create New User'})
+
+        user = User.objects.create_user(
+            username=username,
+            password=password,
+            email=email,
+            first_name=first_name,
+            last_name=last_name,
+        )
+
+        selected_role = Role.objects.filter(id=role_id).first() if role_id else None
+        if not selected_role:
+            selected_role = Role.objects.filter(code='ANALYST').first()
+
+        UserProfile.objects.create(
+            user=user,
+            role=selected_role,
+            department=department,
+            phone=phone,
+            use_custom_permissions=False
+        )
+
+        AuditLog.objects.create(
+            action='USER_CREATE',
+            model_name='User',
+            object_id=str(user.id),
+            user=request.user,
+            details={'username': username, 'role': selected_role.name if selected_role else None}
+        )
+
+        messages.success(request, f"User '{username}' created successfully with role '{selected_role.name if selected_role else 'None'}'.")
+        return redirect('core:rbac_dashboard')
+
+    return render(request, 'core/rbac_user_form.html', {
+        'roles': roles,
+        'action_title': 'Create New User',
+    })
+
+
+@login_required
+@permission_required('rbac', 'can_manage')
+def rbac_user_edit_view(request, user_id):
+    """
+    Edit user profile, name, email, role, and optional password reset.
+    """
+    target_user = get_object_or_404(User.objects.select_related('profile'), id=user_id)
+    roles = Role.objects.all().order_by('name')
+
+    # Ensure profile exists
+    profile, _ = UserProfile.objects.get_or_create(user=target_user)
+
+    if request.method == 'POST':
+        target_user.first_name = request.POST.get('first_name', '').strip()
+        target_user.last_name = request.POST.get('last_name', '').strip()
+        target_user.email = request.POST.get('email', '').strip()
+
+        new_password = request.POST.get('new_password', '').strip()
+        if new_password:
+            target_user.set_password(new_password)
+
+        role_id = request.POST.get('role_id')
+        selected_role = Role.objects.filter(id=role_id).first() if role_id else None
+        profile.role = selected_role
+        profile.department = request.POST.get('department', '').strip()
+        profile.phone = request.POST.get('phone', '').strip()
+
+        # Update superuser flag if selected role is SUPER_ADMIN
+        if selected_role and selected_role.code == 'SUPER_ADMIN':
+            target_user.is_superuser = True
+            target_user.is_staff = True
+        elif not target_user.is_superuser:
+            pass  # keep existing staff/superuser flags safe
+
+        target_user.save()
+        profile.save()
+
+        AuditLog.objects.create(
+            action='USER_UPDATE',
+            model_name='User',
+            object_id=str(target_user.id),
+            user=request.user,
+            details={'username': target_user.username, 'role': selected_role.name if selected_role else None}
+        )
+
+        messages.success(request, f"User '{target_user.username}' updated successfully.")
+        return redirect('core:rbac_dashboard')
+
+    return render(request, 'core/rbac_user_form.html', {
+        'target_user': target_user,
+        'profile': profile,
+        'roles': roles,
+        'action_title': f"Edit User: {target_user.username}",
+    })
+
+
+@login_required
+@permission_required('rbac', 'can_manage')
+def rbac_toggle_user_active_view(request, user_id):
+    """
+    Activate or deactivate a user account.
+    """
+    target_user = get_object_or_404(User, id=user_id)
+    if target_user == request.user:
+        messages.error(request, "You cannot deactivate your own account.")
+        return redirect('core:rbac_dashboard')
+
+    target_user.is_active = not target_user.is_active
+    target_user.save()
+
+    status_str = "activated" if target_user.is_active else "deactivated"
+    AuditLog.objects.create(
+        action='USER_UPDATE',
+        model_name='User',
+        object_id=str(target_user.id),
+        user=request.user,
+        details={'username': target_user.username, 'is_active': target_user.is_active}
+    )
+    messages.success(request, f"User '{target_user.username}' has been {status_str}.")
+    return redirect('core:rbac_dashboard')
+
+
+@login_required
+@permission_required('rbac', 'can_manage')
+def rbac_user_permissions_view(request, user_id):
+    """
+    Matrix UI to configure individual granular permissions for a specific user.
+    """
+    target_user = get_object_or_404(User.objects.select_related('profile', 'profile__role'), id=user_id)
+    profile, _ = UserProfile.objects.get_or_create(user=target_user)
+    roles = Role.objects.all().order_by('name')
+
+    action_fields = ['can_view', 'can_add', 'can_edit', 'can_delete', 'can_upload', 'can_export', 'can_manage']
+
+    if request.method == 'POST':
+        use_custom = request.POST.get('use_custom_permissions') == 'on'
+        profile.use_custom_permissions = use_custom
+        profile.save()
+
+        # If custom permissions are enabled, save module permission flags
+        if use_custom:
+            for mod in AVAILABLE_MODULES:
+                mod_code = mod['code']
+                allowed = mod.get('allowed_actions', [])
+
+                perm_vals = {}
+                for act in action_fields:
+                    if act in allowed:
+                        # Checkbox name: perm_{mod_code}_{act}
+                        field_name = f"perm_{mod_code}_{act}"
+                        perm_vals[act] = (request.POST.get(field_name) == 'on')
+                    else:
+                        perm_vals[act] = False
+
+                ModulePermission.objects.update_or_create(
+                    user=target_user,
+                    module_code=mod_code,
+                    defaults=perm_vals
+                )
+        else:
+            # User uses role defaults; delete custom user-level overrides to stay clean
+            ModulePermission.objects.filter(user=target_user).delete()
+
+        AuditLog.objects.create(
+            action='PERMISSION_CHANGE',
+            model_name='UserProfile',
+            object_id=str(target_user.id),
+            user=request.user,
+            details={'target_user': target_user.username, 'use_custom_permissions': use_custom}
+        )
+
+        messages.success(request, f"Permissions for '{target_user.username}' updated successfully.")
+        return redirect('core:rbac_user_permissions', user_id=target_user.id)
+
+    # Prepare effective permissions and custom user permissions map for the matrix
+    user_perms_map = {
+        p.module_code: p for p in ModulePermission.objects.filter(user=target_user)
+    }
+    role_perms_map = {}
+    if profile.role:
+        role_perms_map = {
+            p.module_code: p for p in ModulePermission.objects.filter(role=profile.role)
+        }
+
+    # Build matrix rows for template
+    matrix_rows = []
+    for mod in AVAILABLE_MODULES:
+        mod_code = mod['code']
+        allowed = mod.get('allowed_actions', [])
+        
+        custom_perm = user_perms_map.get(mod_code)
+        role_perm = role_perms_map.get(mod_code)
+
+        row_actions = {}
+        for act in action_fields:
+            is_allowed = act in allowed
+            # Value to display: if profile.use_custom_permissions, use custom_perm; else role_perm
+            if profile.use_custom_permissions and custom_perm:
+                is_checked = getattr(custom_perm, act, False)
+            elif role_perm:
+                is_checked = getattr(role_perm, act, False)
+            elif target_user.is_superuser:
+                is_checked = True
+            else:
+                is_checked = False
+
+            row_actions[act] = {
+                'is_allowed': is_allowed,
+                'is_checked': is_checked,
+                'field_name': f"perm_{mod_code}_{act}",
+            }
+
+        matrix_rows.append({
+            'code': mod_code,
+            'name': mod['name'],
+            'group': mod['group'],
+            'icon': mod.get('icon', 'bi-app'),
+            'actions': row_actions,
+        })
+
+    return render(request, 'core/rbac_matrix.html', {
+        'target_user': target_user,
+        'profile': profile,
+        'roles': roles,
+        'matrix_rows': matrix_rows,
+        'action_fields': action_fields,
+        'mode': 'user',
+        'page_title': f"Configure Permissions: {target_user.username}",
+    })
+
+
+@login_required
+@permission_required('rbac', 'can_manage')
+def rbac_role_permissions_view(request, role_id):
+    """
+    Matrix UI to configure permissions for a Role template.
+    """
+    role = get_object_or_404(Role, id=role_id)
+    action_fields = ['can_view', 'can_add', 'can_edit', 'can_delete', 'can_upload', 'can_export', 'can_manage']
+
+    if request.method == 'POST':
+        for mod in AVAILABLE_MODULES:
+            mod_code = mod['code']
+            allowed = mod.get('allowed_actions', [])
+
+            perm_vals = {}
+            for act in action_fields:
+                if act in allowed:
+                    field_name = f"perm_{mod_code}_{act}"
+                    perm_vals[act] = (request.POST.get(field_name) == 'on')
+                else:
+                    perm_vals[act] = False
+
+            ModulePermission.objects.update_or_create(
+                role=role,
+                module_code=mod_code,
+                defaults=perm_vals
+            )
+
+        AuditLog.objects.create(
+            action='ROLE_UPDATE',
+            model_name='Role',
+            object_id=str(role.id),
+            user=request.user,
+            details={'role_code': role.code, 'role_name': role.name}
+        )
+
+        messages.success(request, f"Role template '{role.name}' permissions updated successfully.")
+        return redirect('core:rbac_role_permissions', role_id=role.id)
+
+    role_perms_map = {
+        p.module_code: p for p in ModulePermission.objects.filter(role=role)
+    }
+
+    matrix_rows = []
+    for mod in AVAILABLE_MODULES:
+        mod_code = mod['code']
+        allowed = mod.get('allowed_actions', [])
+        role_perm = role_perms_map.get(mod_code)
+
+        row_actions = {}
+        for act in action_fields:
+            is_allowed = act in allowed
+            is_checked = getattr(role_perm, act, False) if role_perm else (role.code == 'SUPER_ADMIN')
+
+            row_actions[act] = {
+                'is_allowed': is_allowed,
+                'is_checked': is_checked,
+                'field_name': f"perm_{mod_code}_{act}",
+            }
+
+        matrix_rows.append({
+            'code': mod_code,
+            'name': mod['name'],
+            'group': mod['group'],
+            'icon': mod.get('icon', 'bi-app'),
+            'actions': row_actions,
+        })
+
+    return render(request, 'core/rbac_matrix.html', {
+        'role': role,
+        'matrix_rows': matrix_rows,
+        'action_fields': action_fields,
+        'mode': 'role',
+        'page_title': f"Configure Role Permissions: {role.name}",
+    })
+
+
+@login_required
+@permission_required('rbac', 'can_manage')
+def rbac_role_create_view(request):
+    """
+    Create a new custom Role template.
+    """
+    if request.method == 'POST':
+        name = request.POST.get('name', '').strip()
+        description = request.POST.get('description', '').strip()
+        code = slugify(name).upper().replace('-', '_')
+
+        if not name:
+            messages.error(request, 'Role name is required.')
+            return redirect('core:rbac_dashboard')
+
+        if Role.objects.filter(code=code).exists():
+            messages.error(request, f"A role with code '{code}' already exists.")
+            return redirect('core:rbac_dashboard')
+
+        role = Role.objects.create(
+            name=name,
+            code=code,
+            description=description,
+            is_system_role=False
+        )
+
+        AuditLog.objects.create(
+            action='ROLE_CREATE',
+            model_name='Role',
+            object_id=str(role.id),
+            user=request.user,
+            details={'role_name': name, 'role_code': code}
+        )
+
+        messages.success(request, f"Role '{name}' created. You can now configure its permissions.")
+        return redirect('core:rbac_role_permissions', role_id=role.id)
+
+    return redirect('core:rbac_dashboard')

@@ -1,0 +1,47 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}Access Denied (403){% endblock %}
+
+{% block content %}
+<div class="row justify-content-center py-5">
+    <div class="col-md-8 col-lg-6 text-center">
+        <div class="card border-0 shadow-sm p-4 p-md-5">
+            <div class="mb-4">
+                <div class="d-inline-flex align-items-center justify-content-center bg-danger-subtle text-danger rounded-circle" style="width: 80px; height: 80px;">
+                    <i class="bi bi-shield-lock-fill" style="font-size: 2.75rem;"></i>
+                </div>
+            </div>
+            
+            <h2 class="fw-bold text-dark mb-2">Access Restricted</h2>
+            <p class="text-muted mb-4" style="font-size: 1.05rem;">
+                {{ error_message|default:"You do not have the required permissions to access this module or perform this action." }}
+            </p>
+
+            <div class="p-3 bg-light rounded-3 mb-4 text-start">
+                <div class="d-flex justify-content-between mb-2 pb-2 border-bottom">
+                    <span class="text-muted small">Target Module:</span>
+                    <span class="fw-semibold text-dark small">{{ module_name|default:module_code }}</span>
+                </div>
+                <div class="d-flex justify-content-between mb-2 pb-2 border-bottom">
+                    <span class="text-muted small">Required Action:</span>
+                    <span class="badge bg-danger text-uppercase px-2 py-1">{{ required_action|default:"VIEW" }}</span>
+                </div>
+                <div class="d-flex justify-content-between">
+                    <span class="text-muted small">Your Active Role:</span>
+                    <span class="badge bg-secondary px-2 py-1">{{ user_role|default:"Custom" }}</span>
+                </div>
+            </div>
+
+            <div class="d-flex justify-content-center gap-3">
+                <a href="javascript:history.back()" class="btn btn-outline-secondary px-4 py-2">
+                    <i class="bi bi-arrow-left me-1"></i> Go Back
+                </a>
+                <a href="{% url 'analytics:dashboard' %}" class="btn btn-primary px-4 py-2">
+                    <i class="bi bi-speedometer2 me-1"></i> Executive Dashboard
+                </a>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

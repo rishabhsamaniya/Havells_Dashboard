@@ -12,6 +12,13 @@ class AuditLog(models.Model):
         ('EXPORT', 'Report Export'),
         ('TARGET_UPDATE', 'RM Target Update'),
         ('LOGIN', 'User Login'),
+        ('USER_CREATE', 'User Account Created'),
+        ('USER_EDIT', 'User Account Updated'),
+        ('USER_STATUS', 'User Status Toggled'),
+        ('PERMISSION_UPDATE', 'Permissions Updated'),
+        ('ROLE_CREATE', 'Role Created'),
+        ('ROLE_UPDATE', 'Role Updated'),
+        ('ROLE_DELETE', 'Role Deleted'),
     ]
 
     action = models.CharField(max_length=50, choices=ACTION_CHOICES)
@@ -30,6 +37,90 @@ class AuditLog(models.Model):
     def __str__(self):
         user_str = self.user.username if self.user else 'System'
         return f"[{self.timestamp:%Y-%m-%d %H:%M}] {self.action} by {user_str}"
+
+
+class Role(models.Model):
+    """
+    Role defining a functional template of module-level permissions.
+    Predefined system roles: SUPER_ADMIN, MANAGEMENT, MIS_EXECUTIVE, ANALYST.
+    Administrators can create unlimited custom roles.
+    """
+    code = models.CharField(max_length=50, unique=True, db_index=True)
+    name = models.CharField(max_length=100, unique=True)
+    description = models.TextField(blank=True)
+    is_system_role = models.BooleanField(default=False, help_text="System default roles cannot be deleted")
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ['name']
+        verbose_name = 'Role'
+        verbose_name_plural = 'Roles'
+
+    def __str__(self):
+        return self.name
+
+
+class UserProfile(models.Model):
+    """
+    Extended profile for Django User storing role assignment and custom permission overrides.
+    """
+    user = models.OneToOneField(User, on_delete=models.CASCADE, related_name='profile')
+    role = models.ForeignKey(Role, on_delete=models.SET_NULL, null=True, blank=True, related_name='users')
+    use_custom_permissions = models.BooleanField(
+        default=False,
+        help_text="When True, the user's specific ModulePermission records override their assigned Role template"
+    )
+    department = models.CharField(max_length=100, blank=True)
+    phone = models.CharField(max_length=20, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = 'User Profile'
+        verbose_name_plural = 'User Profiles'
+
+    def __str__(self):
+        role_name = self.role.name if self.role else ("Super Admin" if self.user.is_superuser else "No Role")
+        return f"{self.user.username} ({role_name})"
+
+
+class ModulePermission(models.Model):
+    """
+    Granular permission record associated either with a Role template or a User override.
+    """
+    role = models.ForeignKey(Role, on_delete=models.CASCADE, null=True, blank=True, related_name='permissions')
+    user = models.ForeignKey(User, on_delete=models.CASCADE, null=True, blank=True, related_name='custom_permissions')
+    module_code = models.CharField(max_length=50, db_index=True)
+    
+    can_view = models.BooleanField(default=False)
+    can_add = models.BooleanField(default=False)
+    can_edit = models.BooleanField(default=False)
+    can_delete = models.BooleanField(default=False)
+    can_upload = models.BooleanField(default=False)
+    can_export = models.BooleanField(default=False)
+    can_manage = models.BooleanField(default=False)
+
+    class Meta:
+        verbose_name = 'Module Permission'
+        verbose_name_plural = 'Module Permissions'
+        constraints = [
+            models.UniqueConstraint(
+                fields=['role', 'module_code'],
+                name='unique_role_module_perm',
+                condition=models.Q(role__isnull=False)
+            ),
+            models.UniqueConstraint(
+                fields=['user', 'module_code'],
+                name='unique_user_module_perm',
+                condition=models.Q(user__isnull=False)
+            ),
+        ]
+
+    def __str__(self):
+        owner = self.role.name if self.role else (self.user.username if self.user else "Unassigned")
+        return f"{owner} - {self.module_code} [View:{self.can_view}, Edit:{self.can_edit}, Upload:{self.can_upload}, Export:{self.can_export}]"
+
 
 
 class MetricDefinition(models.Model):

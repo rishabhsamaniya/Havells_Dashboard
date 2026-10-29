@@ -11,51 +11,61 @@ from django.core.files.storage import default_storage
 from apps.imports.models import ImportBatch, RejectedRecord
 from apps.imports.services.excel_service import ExcelImportService, CANONICAL_FIELD_CANDIDATES
 from apps.analytics.services.analytics_service import AnalyticsService
+from apps.core.permissions import permission_required, has_module_perm
 
 @login_required
+@permission_required('upload', 'can_view')
 def upload_view(request):
-    if request.method == 'POST' and request.FILES.get('excel_file'):
-        uploaded_file = request.FILES['excel_file']
-        file_ext = os.path.splitext(uploaded_file.name)[1].lower()
-        if file_ext not in ['.xlsx', '.xls']:
-            messages.error(request, 'Invalid file format. Please upload an Excel file (.xlsx or .xls).')
-            return redirect('imports:upload')
+    if request.method == 'POST':
+        if not has_module_perm(request.user, 'upload', 'can_upload', request):
+            return render(request, 'core/403.html', {
+                'module_code': 'upload',
+                'module_name': 'Upload Excel',
+                'required_action': 'can_upload',
+                'error_message': 'You do not have permission to upload Excel files.'
+            }, status=403)
+        if request.FILES.get('excel_file'):
+            uploaded_file = request.FILES['excel_file']
+            file_ext = os.path.splitext(uploaded_file.name)[1].lower()
+            if file_ext not in ['.xlsx', '.xls']:
+                messages.error(request, 'Invalid file format. Please upload an Excel file (.xlsx or .xls).')
+                return redirect('imports:upload')
 
-        # Calculate file hash
-        file_hash = ImportBatch.calculate_file_hash(uploaded_file)
-        
-        # Check duplicate import
-        existing_batch = ImportBatch.objects.filter(file_hash=file_hash, is_active=True).first()
-        is_duplicate_hash = existing_batch is not None
+            # Calculate file hash
+            file_hash = ImportBatch.calculate_file_hash(uploaded_file)
+            
+            # Check duplicate import
+            existing_batch = ImportBatch.objects.filter(file_hash=file_hash, is_active=True).first()
+            is_duplicate_hash = existing_batch is not None
 
-        # Create batch
-        batch = ImportBatch.objects.create(
-            file_name=uploaded_file.name,
-            file_hash=file_hash,
-            uploaded_file=uploaded_file,
-            uploaded_by=request.user,
-            status='PENDING'
-        )
+            # Create batch
+            batch = ImportBatch.objects.create(
+                file_name=uploaded_file.name,
+                file_hash=file_hash,
+                uploaded_file=uploaded_file,
+                uploaded_by=request.user,
+                status='PENDING'
+            )
 
-        # Inspect workbook
-        try:
-            sheet_info = ExcelImportService.inspect_workbook(batch.uploaded_file.path)
-            batch.detected_sheets = [s['name'] for s in sheet_info]
+            # Inspect workbook
+            try:
+                sheet_info = ExcelImportService.inspect_workbook(batch.uploaded_file.path)
+                batch.detected_sheets = [s['name'] for s in sheet_info]
+                batch.save()
+            except Exception as e:
+                messages.error(request, f"Error inspecting Excel file: {str(e)}")
+                batch.status = 'FAILED'
+                batch.error_log = str(e)
+                batch.save()
+                return redirect('imports:upload')
+
+            # Auto-pick Master sheet if available, else first sheet
+            master_candidate = next((s['name'] for s in sheet_info if 'master' in s['name'].lower()), None)
+            selected_sheet = master_candidate or (sheet_info[0]['name'] if sheet_info else 'Sheet1')
+            batch.sheet_name = selected_sheet
             batch.save()
-        except Exception as e:
-            messages.error(request, f"Error inspecting Excel file: {str(e)}")
-            batch.status = 'FAILED'
-            batch.error_log = str(e)
-            batch.save()
-            return redirect('imports:upload')
 
-        # Auto-pick Master sheet if available, else first sheet
-        master_candidate = next((s['name'] for s in sheet_info if 'master' in s['name'].lower()), None)
-        selected_sheet = master_candidate or (sheet_info[0]['name'] if sheet_info else 'Sheet1')
-        batch.sheet_name = selected_sheet
-        batch.save()
-
-        return redirect('imports:mapping', batch_id=batch.id)
+            return redirect('imports:mapping', batch_id=batch.id)
 
     recent_batches = ImportBatch.objects.all().order_by('-uploaded_at')[:10]
     return render(request, 'imports/upload.html', {
@@ -63,6 +73,7 @@ def upload_view(request):
     })
 
 @login_required
+@permission_required('upload', 'can_view')
 def column_mapping_view(request, batch_id):
     batch = get_object_or_404(ImportBatch, id=batch_id)
     
@@ -81,6 +92,13 @@ def column_mapping_view(request, batch_id):
         return redirect('imports:upload')
 
     if request.method == 'POST':
+        if not has_module_perm(request.user, 'upload', 'can_upload', request):
+            return render(request, 'core/403.html', {
+                'module_code': 'upload',
+                'module_name': 'Upload Excel',
+                'required_action': 'can_upload',
+                'error_message': 'You do not have permission to process data imports.'
+            }, status=403)
         # Construct mapping from form post
         mapping = {}
         for canonical in CANONICAL_FIELD_CANDIDATES.keys():
@@ -133,11 +151,13 @@ def column_mapping_view(request, batch_id):
     })
 
 @login_required
+@permission_required('history', 'can_view')
 def import_history_view(request):
     batches = ImportBatch.objects.all().order_by('-uploaded_at')
     return render(request, 'imports/history.html', {'batches': batches})
 
 @login_required
+@permission_required('history', 'can_export')
 def download_rejected_records(request, batch_id):
     batch = get_object_or_404(ImportBatch, id=batch_id)
     rejected_rows = batch.rejected_rows.all().order_by('source_row_number')
@@ -166,6 +186,7 @@ def download_rejected_records(request, batch_id):
     return response
 
 @login_required
+@permission_required('history', 'can_view')
 def reconcile_batch_view(request, batch_id):
     batch = get_object_or_404(ImportBatch, id=batch_id)
     try:

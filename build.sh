@@ -11,4 +11,7 @@ python manage.py collectstatic --noinput
 echo "==> Running database migrations..."
 python manage.py migrate
 
+echo "==> Initializing RBAC Roles and Permissions..."
+python manage.py init_rbac
+
 echo "==> Build completed successfully!"

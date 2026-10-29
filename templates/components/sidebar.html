@@ -8,58 +8,90 @@
     </div>
 
     <div class="sidebar-menu">
+        <!-- Overview Group -->
+        {% if user_perms.dashboard.can_view %}
         <div class="nav-section-title">Overview</div>
-        <a href="{% url 'analytics:dashboard' %}" class="sidebar-link {% if request.resolver_match.url_name == 'dashboard' %}active{% endif %}">
+        <a href="{% url 'analytics:dashboard' %}" class="sidebar-link {% if request.resolver_match.url_name == 'dashboard' %}active{% endif %}" id="nav-dashboard">
             <i class="bi bi-speedometer2"></i>
             <span>Executive Dashboard</span>
         </a>
+        {% endif %}
 
+        <!-- Data Pipeline Group -->
+        {% if user_perms.upload.can_view or user_perms.history.can_view %}
         <div class="nav-section-title">Data Pipeline</div>
-        <a href="{% url 'imports:upload' %}" class="sidebar-link {% if request.resolver_match.url_name == 'upload' %}active{% endif %}">
+        {% if user_perms.upload.can_view %}
+        <a href="{% url 'imports:upload' %}" class="sidebar-link {% if request.resolver_match.url_name == 'upload' %}active{% endif %}" id="nav-upload">
             <i class="bi bi-cloud-arrow-up"></i>
             <span>Upload Excel</span>
         </a>
-        <a href="{% url 'imports:history' %}" class="sidebar-link {% if request.resolver_match.url_name == 'history' %}active{% endif %}">
+        {% endif %}
+        {% if user_perms.history.can_view %}
+        <a href="{% url 'imports:history' %}" class="sidebar-link {% if request.resolver_match.url_name == 'history' %}active{% endif %}" id="nav-history">
             <i class="bi bi-clock-history"></i>
             <span>Import History</span>
         </a>
+        {% endif %}
+        {% endif %}
 
+        <!-- Business Analytics Group -->
+        {% if user_perms.rm.can_view or user_perms.monthly.can_view or user_perms.story.can_view or user_perms.payment.can_view or user_perms.category.can_view or user_perms.spoc.can_view or user_perms.dealers.can_view or user_perms.pnl.can_view %}
         <div class="nav-section-title">Business Analytics</div>
-        <a href="{% url 'analytics:rm' %}" class="sidebar-link {% if request.resolver_match.url_name == 'rm' %}active{% endif %}">
+        {% if user_perms.rm.can_view %}
+        <a href="{% url 'analytics:rm' %}" class="sidebar-link {% if request.resolver_match.url_name == 'rm' %}active{% endif %}" id="nav-rm">
             <i class="bi bi-people-fill"></i>
             <span>RM Performance</span>
         </a>
-        <a href="{% url 'analytics:monthly' %}" class="sidebar-link {% if request.resolver_match.url_name == 'monthly' %}active{% endif %}">
+        {% endif %}
+        {% if user_perms.monthly.can_view %}
+        <a href="{% url 'analytics:monthly' %}" class="sidebar-link {% if request.resolver_match.url_name == 'monthly' %}active{% endif %}" id="nav-monthly">
             <i class="bi bi-calendar3"></i>
             <span>Monthly Billing</span>
         </a>
-        <a href="{% url 'analytics:story' %}" class="sidebar-link {% if request.resolver_match.url_name == 'story' %}active{% endif %}">
+        {% endif %}
+        {% if user_perms.story.can_view %}
+        <a href="{% url 'analytics:story' %}" class="sidebar-link {% if request.resolver_match.url_name == 'story' %}active{% endif %}" id="nav-story">
             <i class="bi bi-pie-chart-fill"></i>
             <span>STORY Analysis</span>
         </a>
-        <a href="{% url 'analytics:payment' %}" class="sidebar-link {% if request.resolver_match.url_name == 'payment' %}active{% endif %}">
+        {% endif %}
+        {% if user_perms.payment.can_view %}
+        <a href="{% url 'analytics:payment' %}" class="sidebar-link {% if request.resolver_match.url_name == 'payment' %}active{% endif %}" id="nav-payment">
             <i class="bi bi-cash-stack"></i>
             <span>Payment Reconcile</span>
         </a>
-        <a href="{% url 'analytics:category' %}" class="sidebar-link {% if request.resolver_match.url_name == 'category' %}active{% endif %}">
+        {% endif %}
+        {% if user_perms.category.can_view %}
+        <a href="{% url 'analytics:category' %}" class="sidebar-link {% if request.resolver_match.url_name == 'category' %}active{% endif %}" id="nav-category">
             <i class="bi bi-tags-fill"></i>
             <span>Categories</span>
         </a>
-        <a href="{% url 'analytics:spoc' %}" class="sidebar-link {% if request.resolver_match.url_name == 'spoc' %}active{% endif %}">
+        {% endif %}
+        {% if user_perms.spoc.can_view %}
+        <a href="{% url 'analytics:spoc' %}" class="sidebar-link {% if request.resolver_match.url_name == 'spoc' %}active{% endif %}" id="nav-spoc">
             <i class="bi bi-person-check-fill"></i>
             <span>Payment SPOC</span>
         </a>
-        <a href="{% url 'analytics:dealers' %}" class="sidebar-link {% if request.resolver_match.url_name == 'dealers' %}active{% endif %}">
+        {% endif %}
+        {% if user_perms.dealers.can_view %}
+        <a href="{% url 'analytics:dealers' %}" class="sidebar-link {% if request.resolver_match.url_name == 'dealers' %}active{% endif %}" id="nav-dealers">
             <i class="bi bi-building"></i>
             <span>Dealers & Firms</span>
         </a>
-        <a href="{% url 'analytics:pnl' %}" class="sidebar-link {% if request.resolver_match.url_name == 'pnl' %}active{% endif %}">
+        {% endif %}
+        {% if user_perms.pnl.can_view %}
+        <a href="{% url 'analytics:pnl' %}" class="sidebar-link {% if request.resolver_match.url_name == 'pnl' %}active{% endif %}" id="nav-pnl">
             <i class="bi bi-graph-up-arrow"></i>
             <span>Profit & Loss (P&L)</span>
         </a>
+        {% endif %}
+        {% endif %}
 
+        <!-- Data Quality & Reports Group -->
+        {% if user_perms.quality.can_view or user_perms.category_mapping.can_view or user_perms.transactions.can_view or user_perms.export.can_view %}
         <div class="nav-section-title">Data Quality & Reports</div>
-        <a href="{% url 'quality:issues' %}" class="sidebar-link {% if request.resolver_match.url_name == 'issues' %}active{% endif %}">
+        {% if user_perms.quality.can_view %}
+        <a href="{% url 'quality:issues' %}" class="sidebar-link {% if request.resolver_match.url_name == 'issues' %}active{% endif %}" id="nav-quality">
             <i class="bi bi-shield-exclamation"></i>
             <span class="d-flex align-items-center justify-content-between w-100">
                 Data Quality
@@ -68,35 +100,56 @@
                 {% endif %}
             </span>
         </a>
-        <a href="{% url 'quality:categories' %}" class="sidebar-link {% if request.resolver_match.url_name == 'categories' %}active{% endif %}">
+        {% endif %}
+        {% if user_perms.category_mapping.can_view %}
+        <a href="{% url 'quality:categories' %}" class="sidebar-link {% if request.resolver_match.url_name == 'categories' %}active{% endif %}" id="nav-category-mapping">
             <i class="bi bi-sliders"></i>
             <span>Category Mapping</span>
         </a>
-        <a href="{% url 'analytics:transactions' %}" class="sidebar-link {% if request.resolver_match.url_name == 'transactions' %}active{% endif %}">
+        {% endif %}
+        {% if user_perms.transactions.can_view %}
+        <a href="{% url 'analytics:transactions' %}" class="sidebar-link {% if request.resolver_match.url_name == 'transactions' %}active{% endif %}" id="nav-transactions">
             <i class="bi bi-table"></i>
             <span>Transaction Explorer</span>
         </a>
-        <a href="{% url 'analytics:export_centre' %}" class="sidebar-link {% if request.resolver_match.url_name == 'export_centre' %}active{% endif %}">
+        {% endif %}
+        {% if user_perms.export.can_view %}
+        <a href="{% url 'analytics:export_centre' %}" class="sidebar-link {% if request.resolver_match.url_name == 'export_centre' %}active{% endif %}" id="nav-export">
             <i class="bi bi-file-earmark-spreadsheet"></i>
             <span>Export & MIS Reports</span>
         </a>
+        {% endif %}
+        {% endif %}
 
+        <!-- System & Governance Group -->
+        {% if user_perms.audit.can_view or user_perms.settings.can_view or user_perms.rbac.can_view %}
         <div class="nav-section-title">System & Governance</div>
-        <a href="{% url 'core:audit_logs' %}" class="sidebar-link {% if request.resolver_match.url_name == 'audit_logs' %}active{% endif %}">
+        {% if user_perms.audit.can_view %}
+        <a href="{% url 'core:audit_logs' %}" class="sidebar-link {% if request.resolver_match.url_name == 'audit_logs' %}active{% endif %}" id="nav-audit">
             <i class="bi bi-journal-text"></i>
             <span>Audit Trail</span>
         </a>
-        <a href="{% url 'core:settings' %}" class="sidebar-link {% if request.resolver_match.url_name == 'settings' %}active{% endif %}">
+        {% endif %}
+        {% if user_perms.settings.can_view %}
+        <a href="{% url 'core:settings' %}" class="sidebar-link {% if request.resolver_match.url_name == 'settings' %}active{% endif %}" id="nav-settings">
             <i class="bi bi-gear-fill"></i>
             <span>Settings & Definitions</span>
         </a>
+        {% endif %}
+        {% if user_perms.rbac.can_view %}
+        <a href="{% url 'core:rbac_dashboard' %}" class="sidebar-link {% if 'rbac' in request.resolver_match.url_name %}active{% endif %}" id="nav-rbac">
+            <i class="bi bi-shield-lock-fill"></i>
+            <span>Access Control (RBAC)</span>
+        </a>
+        {% endif %}
+        {% endif %}
     </div>
 
     <div class="sidebar-footer">
         <div class="d-flex align-items-center justify-content-between text-muted" style="font-size: 0.75rem;">
-            <div>
-                <i class="bi bi-database me-1"></i>
-                <span>{{ current_fy }}</span>
+            <div class="d-flex align-items-center gap-1">
+                <i class="bi bi-person-badge"></i>
+                <span class="badge bg-light text-dark border px-2 py-1" style="font-size: 0.7rem;">{{ user_role|default:"User" }}</span>
             </div>
             <a href="{% url 'core:logout' %}" class="text-danger text-decoration-none" title="Log Out">
                 <i class="bi bi-box-arrow-right fs-6"></i>

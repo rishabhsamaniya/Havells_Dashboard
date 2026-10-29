@@ -10,8 +10,10 @@ from django.db.models import Count, Sum
 from apps.quality.models import DataQualityIssue, CategoryMapping
 from apps.analytics.models import BillingTransaction
 from apps.core.models import AuditLog
+from apps.core.permissions import permission_required, has_module_perm
 
 @login_required
+@permission_required('quality', 'can_view')
 def issues_list_view(request):
     qs = DataQualityIssue.objects.select_related('import_batch', 'reviewed_by').all()
 
@@ -32,6 +34,13 @@ def issues_list_view(request):
 
     # Export to Excel if requested
     if request.GET.get('export') == 'excel':
+        if not has_module_perm(request.user, 'quality', 'can_export', request):
+            return render(request, 'core/403.html', {
+                'module_code': 'quality',
+                'module_name': 'Data Quality',
+                'required_action': 'can_export',
+                'error_message': 'You do not have permission to export quality issues.'
+            }, status=403)
         wb = openpyxl.Workbook()
         ws = wb.active
         ws.title = "Data Quality Exceptions"
@@ -72,6 +81,7 @@ def issues_list_view(request):
     })
 
 @login_required
+@permission_required('quality', 'can_edit')
 def review_issue(request, issue_id):
     issue = get_object_or_404(DataQualityIssue, id=issue_id)
     if request.method == 'POST':
@@ -96,8 +106,16 @@ def review_issue(request, issue_id):
     return redirect('quality:issues')
 
 @login_required
+@permission_required('category_mapping', 'can_view')
 def category_normalization_view(request):
     if request.method == 'POST':
+        if not has_module_perm(request.user, 'category_mapping', 'can_edit', request):
+            return render(request, 'core/403.html', {
+                'module_code': 'category_mapping',
+                'module_name': 'Category Mapping',
+                'required_action': 'can_edit',
+                'error_message': 'You do not have permission to modify category mappings.'
+            }, status=403)
         action = request.POST.get('action')
         if action == 'update_mapping':
             raw_cat = request.POST.get('raw_category')

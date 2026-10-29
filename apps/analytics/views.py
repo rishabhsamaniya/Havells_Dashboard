@@ -10,6 +10,7 @@ from apps.analytics.models import BillingTransaction
 from apps.analytics.services.analytics_service import AnalyticsService
 from apps.analytics.services.export_service import ExportService
 from apps.core.models import AuditLog
+from apps.core.permissions import permission_required
 
 def extract_filters_from_request(request):
     """
@@ -33,6 +34,7 @@ def extract_filters_from_request(request):
     return filters
 
 @login_required
+@permission_required('dashboard', 'can_view')
 def dashboard_view(request):
     AnalyticsService.auto_repair_uncategorized_transactions()
     filters = extract_filters_from_request(request)
@@ -83,6 +85,7 @@ def dashboard_view(request):
     return render(request, 'analytics/dashboard.html', context)
 
 @login_required
+@permission_required('rm', 'can_view')
 def rm_analytics_view(request):
     filters = extract_filters_from_request(request)
     filter_opts = AnalyticsService.get_filter_options()
@@ -105,6 +108,7 @@ def rm_analytics_view(request):
     })
 
 @login_required
+@permission_required('monthly', 'can_view')
 def monthly_analytics_view(request):
     filters = extract_filters_from_request(request)
     filter_opts = AnalyticsService.get_filter_options()
@@ -126,6 +130,7 @@ def monthly_analytics_view(request):
     })
 
 @login_required
+@permission_required('story', 'can_view')
 def story_analytics_view(request):
     filters = extract_filters_from_request(request)
     filter_opts = AnalyticsService.get_filter_options()
@@ -149,6 +154,7 @@ def story_analytics_view(request):
     })
 
 @login_required
+@permission_required('payment', 'can_view')
 def payment_analytics_view(request):
     filters = extract_filters_from_request(request)
     filter_opts = AnalyticsService.get_filter_options()
@@ -162,6 +168,7 @@ def payment_analytics_view(request):
     })
 
 @login_required
+@permission_required('category', 'can_view')
 def category_analytics_view(request):
     AnalyticsService.auto_repair_uncategorized_transactions()
     filters = extract_filters_from_request(request)
@@ -185,6 +192,7 @@ def category_analytics_view(request):
     })
 
 @login_required
+@permission_required('spoc', 'can_view')
 def spoc_analytics_view(request):
     filters = extract_filters_from_request(request)
     filter_opts = AnalyticsService.get_filter_options()
@@ -198,6 +206,7 @@ def spoc_analytics_view(request):
     })
 
 @login_required
+@permission_required('dealers', 'can_view')
 def dealer_analytics_view(request):
     filters = extract_filters_from_request(request)
     filter_opts = AnalyticsService.get_filter_options()
@@ -211,6 +220,7 @@ def dealer_analytics_view(request):
     })
 
 @login_required
+@permission_required('transactions', 'can_view')
 def transaction_explorer_view(request):
     filters = extract_filters_from_request(request)
     filter_opts = AnalyticsService.get_filter_options()
@@ -239,6 +249,7 @@ def transaction_explorer_view(request):
     })
 
 @login_required
+@permission_required('export', 'can_view')
 def export_centre_view(request):
     filters = extract_filters_from_request(request)
     filter_opts = AnalyticsService.get_filter_options()
@@ -252,6 +263,7 @@ def export_centre_view(request):
     })
 
 @login_required
+@permission_required('export', 'can_export')
 def export_mis_workbook(request):
     filters = extract_filters_from_request(request)
     excel_bytes = ExportService.generate_consolidated_mis_workbook(filters)
@@ -272,6 +284,7 @@ def export_mis_workbook(request):
     return response
 
 @login_required
+@permission_required('transactions', 'can_export')
 def export_transactions_csv(request):
     import csv
     filters = extract_filters_from_request(request)
@@ -302,6 +315,7 @@ def export_transactions_csv(request):
     return response
 
 @login_required
+@permission_required('pnl', 'can_view')
 def pnl_analytics_view(request):
     filters = extract_filters_from_request(request)
     filter_opts = AnalyticsService.get_filter_options()
@@ -345,6 +359,7 @@ def pnl_analytics_view(request):
     })
 
 @login_required
+@permission_required('pnl', 'can_export')
 def export_pnl_workbook_view(request):
     filters = extract_filters_from_request(request)
     excel_bytes = ExportService.generate_pnl_workbook(filters)

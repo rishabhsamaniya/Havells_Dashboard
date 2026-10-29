@@ -1,0 +1,293 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}Access Control & User Permissions{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <div>
+        <h3 class="fw-bold text-dark mb-1">Access Control & Role-Based Permissions (RBAC)</h3>
+        <p class="text-muted small mb-0">Manage system users, define role templates, and configure granular module permissions across the Havells MIS dashboard.</p>
+    </div>
+    <div class="d-flex gap-2">
+        <a href="{% url 'core:rbac_user_create' %}" class="btn btn-primary d-flex align-items-center gap-2 px-3 py-2">
+            <i class="bi bi-person-plus-fill"></i>
+            <span>Add New User</span>
+        </a>
+        <button type="button" class="btn btn-outline-dark d-flex align-items-center gap-2 px-3 py-2" data-bs-toggle="modal" data-bs-target="#createRoleModal">
+            <i class="bi bi-shield-plus"></i>
+            <span>Create Role</span>
+        </button>
+    </div>
+</div>
+
+<!-- Stats Overview -->
+<div class="row g-3 mb-4">
+    <div class="col-md-3">
+        <div class="card border-0 shadow-sm p-3 h-100">
+            <div class="d-flex align-items-center justify-content-between">
+                <div>
+                    <div class="text-muted small fw-semibold text-uppercase">Total Users</div>
+                    <div class="fs-3 fw-bold text-dark mt-1">{{ total_users }}</div>
+                </div>
+                <div class="bg-primary-subtle text-primary rounded-3 p-3">
+                    <i class="bi bi-people-fill fs-4"></i>
+                </div>
+            </div>
+            <div class="small text-muted mt-2">Active accounts: <strong class="text-success">{{ active_users }}</strong></div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card border-0 shadow-sm p-3 h-100">
+            <div class="d-flex align-items-center justify-content-between">
+                <div>
+                    <div class="text-muted small fw-semibold text-uppercase">Role Templates</div>
+                    <div class="fs-3 fw-bold text-dark mt-1">{{ total_roles }}</div>
+                </div>
+                <div class="bg-info-subtle text-info rounded-3 p-3">
+                    <i class="bi bi-shield-check fs-4"></i>
+                </div>
+            </div>
+            <div class="small text-muted mt-2">Predefined & Custom Roles</div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card border-0 shadow-sm p-3 h-100">
+            <div class="d-flex align-items-center justify-content-between">
+                <div>
+                    <div class="text-muted small fw-semibold text-uppercase">Super Admins</div>
+                    <div class="fs-3 fw-bold text-danger mt-1">{{ superadmins_count }}</div>
+                </div>
+                <div class="bg-danger-subtle text-danger rounded-3 p-3">
+                    <i class="bi bi-key-fill fs-4"></i>
+                </div>
+            </div>
+            <div class="small text-muted mt-2">Unrestricted access</div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card border-0 shadow-sm p-3 h-100">
+            <div class="d-flex align-items-center justify-content-between">
+                <div>
+                    <div class="text-muted small fw-semibold text-uppercase">Sidebar Modules</div>
+                    <div class="fs-3 fw-bold text-dark mt-1">17</div>
+                </div>
+                <div class="bg-success-subtle text-success rounded-3 p-3">
+                    <i class="bi bi-grid-fill fs-4"></i>
+                </div>
+            </div>
+            <div class="small text-muted mt-2">5 Functional Groups</div>
+        </div>
+    </div>
+</div>
+
+<!-- Tabs for Users and Roles -->
+<ul class="nav nav-pills mb-3 gap-2" id="rbacTabs" role="tablist">
+    <li class="nav-item" role="presentation">
+        <button class="nav-link active px-4 py-2 fw-semibold" id="users-tab" data-bs-toggle="tab" data-bs-target="#users-pane" type="button" role="tab">
+            <i class="bi bi-person-lines-fill me-2"></i>User Accounts ({{ total_users }})
+        </button>
+    </li>
+    <li class="nav-item" role="presentation">
+        <button class="nav-link px-4 py-2 fw-semibold" id="roles-tab" data-bs-toggle="tab" data-bs-target="#roles-pane" type="button" role="tab">
+            <i class="bi bi-shield-lock me-2"></i>Role Templates ({{ total_roles }})
+        </button>
+    </li>
+</ul>
+
+<div class="tab-content" id="rbacTabContent">
+    <!-- USERS TAB -->
+    <div class="tab-pane fade show active" id="users-pane" role="tabpanel">
+        <div class="card border-0 shadow-sm">
+            <div class="card-header bg-white py-3 border-0 d-flex justify-content-between align-items-center">
+                <h5 class="fw-bold mb-0">System User Directory</h5>
+                <input type="text" id="userSearchInput" class="form-control form-control-sm w-auto" placeholder="Search by name, username..." style="min-width: 250px;">
+            </div>
+            <div class="table-responsive">
+                <table class="table table-hover align-middle mb-0" id="usersTable">
+                    <thead class="table-light">
+                        <tr class="text-muted small text-uppercase">
+                            <th class="ps-4">User</th>
+                            <th>Assigned Role</th>
+                            <th>Department</th>
+                            <th>Permissions Source</th>
+                            <th>Status</th>
+                            <th>Last Login</th>
+                            <th class="text-end pe-4">Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for u in users %}
+                        <tr>
+                            <td class="ps-4">
+                                <div class="d-flex align-items-center gap-3">
+                                    <div class="rounded-circle d-flex align-items-center justify-content-center text-white fw-bold {% if u.is_superuser %}bg-danger{% else %}bg-primary{% endif %}" style="width: 38px; height: 38px; font-size: 0.9rem;">
+                                        {{ u.username|slice:":1"|upper }}
+                                    </div>
+                                    <div>
+                                        <div class="fw-bold text-dark">{{ u.get_full_name|default:u.username }}</div>
+                                        <div class="text-muted small">@{{ u.username }} {% if u.email %}• {{ u.email }}{% endif %}</div>
+                                    </div>
+                                </div>
+                            </td>
+                            <td>
+                                {% if u.is_superuser %}
+                                <span class="badge bg-danger-subtle text-danger border border-danger-subtle px-2 py-1">Super Admin</span>
+                                {% elif u.profile.role %}
+                                <span class="badge bg-primary-subtle text-primary border border-primary-subtle px-2 py-1">{{ u.profile.role.name }}</span>
+                                {% else %}
+                                <span class="badge bg-secondary-subtle text-secondary px-2 py-1">No Role</span>
+                                {% endif %}
+                            </td>
+                            <td>
+                                <span class="text-muted small">{{ u.profile.department|default:"—" }}</span>
+                            </td>
+                            <td>
+                                {% if u.profile.use_custom_permissions %}
+                                <span class="badge bg-warning-subtle text-dark border border-warning px-2 py-1" title="User has specific module-level overrides">
+                                    <i class="bi bi-sliders me-1"></i>Custom Matrix
+                                </span>
+                                {% else %}
+                                <span class="badge bg-light text-muted border px-2 py-1" title="Inherits permissions from role template">
+                                    <i class="bi bi-shield me-1"></i>Role Template
+                                </span>
+                                {% endif %}
+                            </td>
+                            <td>
+                                {% if u.is_active %}
+                                <span class="badge bg-success-subtle text-success px-2 py-1"><i class="bi bi-check-circle-fill me-1"></i>Active</span>
+                                {% else %}
+                                <span class="badge bg-danger-subtle text-danger px-2 py-1"><i class="bi bi-x-circle-fill me-1"></i>Deactivated</span>
+                                {% endif %}
+                            </td>
+                            <td>
+                                <span class="text-muted small">{{ u.last_login|date:"d M Y, H:i"|default:"Never" }}</span>
+                            </td>
+                            <td class="text-end pe-4">
+                                <div class="btn-group">
+                                    <a href="{% url 'core:rbac_user_permissions' u.id %}" class="btn btn-sm btn-outline-primary" title="Configure Permissions Matrix">
+                                        <i class="bi bi-grid-3x3-gap-fill me-1"></i> Permissions
+                                    </a>
+                                    <a href="{% url 'core:rbac_user_edit' u.id %}" class="btn btn-sm btn-outline-secondary" title="Edit User Profile">
+                                        <i class="bi bi-pencil-fill"></i>
+                                    </a>
+                                    {% if u != request.user %}
+                                    <a href="{% url 'core:rbac_toggle_user_active' u.id %}" class="btn btn-sm {% if u.is_active %}btn-outline-danger{% else %}btn-outline-success{% endif %}" title="{% if u.is_active %}Deactivate User{% else %}Activate User{% endif %}" onclick="return confirm('Are you sure you want to {% if u.is_active %}deactivate{% else %}activate{% endif %} user {{ u.username }}?');">
+                                        <i class="bi {% if u.is_active %}bi-person-x{% else %}bi-person-check{% endif %}"></i>
+                                    </a>
+                                    {% endif %}
+                                </div>
+                            </td>
+                        </tr>
+                        {% empty %}
+                        <tr>
+                            <td colspan="7" class="text-center py-4 text-muted">No users found.</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <!-- ROLES TAB -->
+    <div class="tab-pane fade" id="roles-pane" role="tabpanel">
+        <div class="card border-0 shadow-sm">
+            <div class="card-header bg-white py-3 border-0 d-flex justify-content-between align-items-center">
+                <h5 class="fw-bold mb-0">Configured Role Templates</h5>
+                <button type="button" class="btn btn-sm btn-primary" data-bs-toggle="modal" data-bs-target="#createRoleModal">
+                    <i class="bi bi-plus-lg me-1"></i> Add Custom Role
+                </button>
+            </div>
+            <div class="table-responsive">
+                <table class="table table-hover align-middle mb-0">
+                    <thead class="table-light">
+                        <tr class="text-muted small text-uppercase">
+                            <th class="ps-4">Role Name</th>
+                            <th>Role Code</th>
+                            <th>Description</th>
+                            <th>Type</th>
+                            <th>Assigned Users</th>
+                            <th class="text-end pe-4">Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for r in roles %}
+                        <tr>
+                            <td class="ps-4">
+                                <div class="d-flex align-items-center gap-2">
+                                    <div class="p-2 rounded-2 {% if r.code == 'SUPER_ADMIN' %}bg-danger-subtle text-danger{% else %}bg-primary-subtle text-primary{% endif %}">
+                                        <i class="bi bi-shield-fill"></i>
+                                    </div>
+                                    <span class="fw-bold text-dark">{{ r.name }}</span>
+                                </div>
+                            </td>
+                            <td>
+                                <code>{{ r.code }}</code>
+                            </td>
+                            <td>
+                                <span class="text-muted small">{{ r.description }}</span>
+                            </td>
+                            <td>
+                                {% if r.is_system_role %}
+                                <span class="badge bg-secondary-subtle text-secondary px-2 py-1">System Preset</span>
+                                {% else %}
+                                <span class="badge bg-info-subtle text-info px-2 py-1">Custom Role</span>
+                                {% endif %}
+                            </td>
+                            <td>
+                                <span class="badge bg-light text-dark border px-2 py-1">{{ r.userprofile_set.count }} user{{ r.userprofile_set.count|pluralize }}</span>
+                            </td>
+                            <td class="text-end pe-4">
+                                <a href="{% url 'core:rbac_role_permissions' r.id %}" class="btn btn-sm btn-outline-primary">
+                                    <i class="bi bi-sliders me-1"></i> Configure Permissions
+                                </a>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Modal: Create Custom Role -->
+<div class="modal fade" id="createRoleModal" tabindex="-1" aria-labelledby="createRoleModalLabel" aria-hidden="true">
+    <div class="modal-dialog">
+        <form method="POST" action="{% url 'core:rbac_role_create' %}" class="modal-content">
+            {% csrf_token %}
+            <div class="modal-header">
+                <h5 class="modal-title fw-bold" id="createRoleModalLabel">Create Custom Role Template</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <div class="mb-3">
+                    <label class="form-label fw-semibold small">Role Name <span class="text-danger">*</span></label>
+                    <input type="text" name="name" class="form-control" placeholder="e.g. Regional Auditor" required>
+                </div>
+                <div class="mb-3">
+                    <label class="form-label fw-semibold small">Description</label>
+                    <textarea name="description" class="form-control" rows="3" placeholder="Briefly describe what this role is authorized to do..."></textarea>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-light" data-bs-dismiss="modal">Cancel</button>
+                <button type="submit" class="btn btn-primary px-4">Create & Configure Matrix</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<script>
+    // Simple table search filter
+    document.getElementById('userSearchInput')?.addEventListener('keyup', function() {
+        const query = this.value.toLowerCase();
+        const rows = document.querySelectorAll('#usersTable tbody tr');
+        rows.forEach(row => {
+            const text = row.innerText.toLowerCase();
+            row.style.display = text.includes(query) ? '' : 'none';
+        });
+    });
+</script>
+{% endblock %}

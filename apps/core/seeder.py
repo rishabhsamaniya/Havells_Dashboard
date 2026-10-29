@@ -11,43 +11,63 @@ def ensure_rbac_seeded(force_reset=False):
     from django.contrib.auth import get_user_model
     User = get_user_model()
 
-    # 1. Seed or Sync AppModule Registry (18 Modules)
+    # 1. Seed or Sync AppModule Registry (18 Modules) safely
     module_instances = {}
     for idx, mod_info in enumerate(AVAILABLE_MODULES):
-        app_mod, created = AppModule.objects.update_or_create(
-            code=mod_info['code'],
-            defaults={
-                'name': mod_info['name'],
-                'group': mod_info['group'],
-                'icon': mod_info.get('icon', 'bi-app'),
-                'url_name': mod_info.get('default_route', ''),
-                'supported_actions': mod_info.get('actions', ['view']),
-                'order': idx,
-                'is_active': True,
-            }
-        )
+        app_mod = AppModule.objects.filter(code=mod_info['code']).first()
+        if not app_mod:
+            app_mod = AppModule.objects.filter(name__iexact=mod_info['name']).first()
+
+        if app_mod:
+            app_mod.code = mod_info['code']
+            app_mod.name = mod_info['name']
+            app_mod.group = mod_info['group']
+            app_mod.icon = mod_info.get('icon', 'bi-app')
+            app_mod.url_name = mod_info.get('default_route', '')
+            app_mod.supported_actions = mod_info.get('actions', ['view'])
+            app_mod.order = idx
+            app_mod.is_active = True
+            app_mod.save()
+        else:
+            app_mod = AppModule.objects.create(
+                code=mod_info['code'],
+                name=mod_info['name'],
+                group=mod_info['group'],
+                icon=mod_info.get('icon', 'bi-app'),
+                url_name=mod_info.get('default_route', ''),
+                supported_actions=mod_info.get('actions', ['view']),
+                order=idx,
+                is_active=True,
+            )
         module_instances[mod_info['code']] = app_mod
 
-    # 2. Seed 5 Predefined Roles & Defaults
+    # 2. Seed 5 Predefined Roles & Defaults safely (handling existing names or codes)
     for role_code, role_data in DEFAULT_ROLE_TEMPLATES.items():
-        role, created = Role.objects.get_or_create(
-            code=role_code,
-            defaults={
-                "name": role_data["name"],
-                "description": role_data["description"],
-                "is_system_role": True,
-            }
-        )
-        if not created and role.name != role_data["name"]:
+        role = Role.objects.filter(code=role_code).first()
+        if not role:
+            role = Role.objects.filter(name__iexact=role_data["name"]).first()
+        if not role:
+            role = Role.objects.filter(code__iexact=role_code).first()
+
+        if role:
+            role.code = role_code
             role.name = role_data["name"]
             role.description = role_data["description"]
+            role.is_system_role = True
             role.save()
+        else:
+            role = Role.objects.create(
+                code=role_code,
+                name=role_data["name"],
+                description=role_data["description"],
+                is_system_role=True,
+            )
 
         # Seed role default permissions
         role_modules_dict = role_data.get("modules", {})
         for mod_code, app_mod in module_instances.items():
             flags = role_modules_dict.get(mod_code, {})
-            allowed = app_mod.supported_actions
+            allowed = app_mod.supported_actions or ['view']
 
             defaults_payload = {
                 "can_view": flags.get("can_view", False) if 'view' in allowed else False,
@@ -92,7 +112,7 @@ def ensure_rbac_seeded(force_reset=False):
             user=user,
             defaults={"role": assigned_role}
         )
-        if not profile.role:
+        if not profile.role and fallback_role:
             profile.role = assigned_role
             profile.save()
 

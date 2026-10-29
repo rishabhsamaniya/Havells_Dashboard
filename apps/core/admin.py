@@ -434,13 +434,24 @@ class CustomUserAdmin(BaseUserAdmin):
                     'field_name': f"override_{mod.code}_{act}",
                 }
 
+            from apps.core.constants import MODULE_SUMMARY_MAP
+            meta = MODULE_SUMMARY_MAP.get(mod.code, {})
+            can_view_eff = eff_mod.get('can_view', False)
             matrix_rows.append({
                 'code': mod.code,
                 'name': mod.name,
                 'group': mod.group,
                 'icon': mod.icon,
+                'summary_hi': meta.get('summary_hi', mod.name),
+                'summary_en': meta.get('summary_en', mod.name),
+                'type_badge': meta.get('type', 'Dashboard' if 'view' in allowed else 'Module'),
+                'badge_color': meta.get('badge_color', 'primary'),
+                'is_visible': can_view_eff,
                 'actions': row_actions,
             })
+
+        visible_modules_count = sum(1 for r in matrix_rows if r['is_visible'])
+        hidden_modules_count = len(matrix_rows) - visible_modules_count
 
         context = {
             **self.admin_site.each_context(request),
@@ -449,6 +460,8 @@ class CustomUserAdmin(BaseUserAdmin):
             'all_roles': all_roles,
             'user_role_name': profile.role.name if profile.role else ('Super Admin' if target_user.is_superuser else 'No Role'),
             'matrix_rows': matrix_rows,
+            'visible_modules_count': visible_modules_count,
+            'hidden_modules_count': hidden_modules_count,
             'title': f"Permission Overrides: {target_user.username}",
         }
         return render(request, 'admin/core/user_matrix.html', context)

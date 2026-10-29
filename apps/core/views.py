@@ -391,12 +391,15 @@ def rbac_user_permissions_view(request, user_id):
 
     effective_map = get_user_effective_permissions(target_user)
 
+    from apps.core.constants import MODULE_SUMMARY_MAP
+
     matrix_rows = []
     for mod in modules:
         allowed = mod.supported_actions or ['view']
         rp = role_perms_map.get(mod.code)
         ov = user_overrides_map.get(mod.code)
         eff_mod = effective_map.get(mod.code, {})
+        meta = MODULE_SUMMARY_MAP.get(mod.code, {})
 
         row_actions = {}
         for act in action_fields:
@@ -414,19 +417,30 @@ def rbac_user_permissions_view(request, user_id):
                 'field_name': f"override_{mod.code}_{act}",
             }
 
+        can_view_eff = eff_mod.get('can_view', False)
         matrix_rows.append({
             'code': mod.code,
             'name': mod.name,
             'group': mod.group,
             'icon': mod.icon,
+            'summary_hi': meta.get('summary_hi', mod.name),
+            'summary_en': meta.get('summary_en', mod.name),
+            'type_badge': meta.get('type', 'Dashboard' if 'view' in allowed else 'Module'),
+            'badge_color': meta.get('badge_color', 'primary'),
+            'is_visible': can_view_eff,
             'actions': row_actions,
         })
+
+    visible_modules_count = sum(1 for r in matrix_rows if r['is_visible'])
+    hidden_modules_count = len(matrix_rows) - visible_modules_count
 
     return render(request, 'core/rbac_matrix.html', {
         'target_user': target_user,
         'profile': profile,
         'roles': all_roles,
         'matrix_rows': matrix_rows,
+        'visible_modules_count': visible_modules_count,
+        'hidden_modules_count': hidden_modules_count,
         'action_fields': action_fields,
         'mode': 'user',
         'page_title': f"Configure Permissions: {target_user.username}",

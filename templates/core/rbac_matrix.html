@@ -25,21 +25,21 @@
             <a href="{% url 'core:rbac_dashboard' %}" class="btn btn-outline-secondary px-3">
                 Cancel
             </a>
-            <button type="submit" form="rbacMatrixForm" class="btn btn-primary px-4 d-flex align-items-center gap-2">
+            <button type="submit" form="rbacMatrixForm" class="btn btn-primary px-4 d-flex align-items-center gap-2 shadow-sm">
                 <i class="bi bi-check-lg"></i>
-                <span>Save Permissions</span>
+                <span class="fw-semibold">Save Permissions</span>
             </button>
         </div>
     </div>
     
-    <div class="d-flex align-items-center gap-3 text-muted small">
+    <div class="d-flex flex-wrap align-items-center gap-3 text-muted small">
         {% if mode == 'user' %}
         <span>User: <strong class="text-dark">{{ target_user.get_full_name|default:target_user.username }} (@{{ target_user.username }})</strong></span>
         <span>•</span>
-        <span>Assigned Role: <span class="badge bg-primary-subtle text-primary border border-primary-subtle">{{ profile.role.name|default:"None" }}</span></span>
+        <span>Assigned Baseline Role: <span class="badge bg-primary-subtle text-primary border border-primary-subtle px-2 py-1">{{ profile.role.name|default:"None" }}</span></span>
         {% if target_user.is_superuser %}
         <span>•</span>
-        <span class="badge bg-danger-subtle text-danger border border-danger-subtle"><i class="bi bi-shield-shaded me-1"></i>Super Admin (Unrestricted Full Access)</span>
+        <span class="badge bg-danger-subtle text-danger border border-danger-subtle px-2 py-1"><i class="bi bi-shield-shaded me-1"></i>Super Admin (Unrestricted Full Access)</span>
         {% endif %}
         {% else %}
         <span>Configuring Role Template: <strong class="text-dark">{{ role.name }} ({{ role.code }})</strong></span>
@@ -54,157 +54,402 @@
     <input type="hidden" name="action_type" value="save_overrides">
 
     {% if mode == 'user' %}
-    <!-- Role Selector Card -->
-    <div class="card border-0 shadow-sm p-3 mb-4 bg-light">
-        <div class="d-flex flex-column flex-md-row justify-content-between align-items-md-center gap-3">
-            <div class="d-flex align-items-center gap-2">
-                <label class="form-label fw-bold mb-0 small text-dark">Baseline Role Template:</label>
-                <select name="role_id" class="form-select form-select-sm w-auto fw-semibold">
-                    {% for r in roles %}
-                    <option value="{{ r.id }}" {% if profile.role.id == r.id %}selected{% endif %}>
-                        {{ r.name }} ({{ r.code }})
-                    </option>
-                    {% endfor %}
-                </select>
-                <span class="text-muted small ms-2">Changing the role updates inherited permissions for any unoverridden module.</span>
+    <!-- Role Switcher & Live Stats Card -->
+    <div class="card border-0 shadow-sm p-3 mb-4 bg-white rounded-3 border-start border-4 border-primary">
+        <div class="d-flex flex-column flex-lg-row justify-content-between align-items-lg-center gap-3">
+            <div class="d-flex flex-wrap align-items-center gap-3">
+                <div class="d-flex align-items-center gap-2">
+                    <label class="form-label fw-bold mb-0 small text-dark">Baseline Role:</label>
+                    <select name="role_id" id="baselineRoleSelect" class="form-select form-select-sm w-auto fw-semibold border-primary-subtle">
+                        {% for r in roles %}
+                        <option value="{{ r.id }}" {% if profile.role.id == r.id %}selected{% endif %}>
+                            {{ r.name }} ({{ r.code }})
+                        </option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <span class="text-muted small">Change role to reset inherited defaults for unoverridden dashboards.</span>
             </div>
-            <div class="small text-muted">
-                <span class="badge bg-success-subtle text-success border border-success-subtle px-2 py-1">ALLOW = Grant</span>
-                <span class="badge bg-danger-subtle text-danger border border-danger-subtle px-2 py-1 ms-1">DENY = Block</span>
-                <span class="badge bg-light text-dark border px-2 py-1 ms-1">INHERIT = Role Default</span>
+            
+            <!-- Live Access Counter -->
+            <div class="d-flex align-items-center gap-2">
+                <div class="badge bg-success-subtle text-success border border-success-subtle px-3 py-2 fs-6 fw-semibold">
+                    <i class="bi bi-eye-fill me-1"></i> <span id="summaryVisibleBadge">{{ visible_modules_count|default:"0" }}</span> Dashboards Visible
+                </div>
+                <div class="badge bg-danger-subtle text-danger border border-danger-subtle px-3 py-2 fs-6 fw-semibold">
+                    <i class="bi bi-eye-slash-fill me-1"></i> <span id="summaryHiddenBadge">{{ hidden_modules_count|default:"0" }}</span> Hidden / Blocked
+                </div>
             </div>
         </div>
     </div>
+
+    <!-- Mode Selector Tabs -->
+    <ul class="nav nav-pills mb-4 gap-2 bg-light p-2 rounded-3 border" id="rbacModeTabs" role="tablist">
+        <li class="nav-item" role="presentation">
+            <button class="nav-link active fw-bold d-flex align-items-center gap-2 px-4 py-2" id="simple-view-tab" data-bs-toggle="pill" data-bs-target="#simple-view-pane" type="button" role="tab">
+                <i class="bi bi-grid-fill text-primary"></i>
+                <span>Dashboard & Summary Access (Simple View)</span>
+            </button>
+        </li>
+        <li class="nav-item" role="presentation">
+            <button class="nav-link fw-semibold d-flex align-items-center gap-2 px-4 py-2 text-secondary" id="advanced-view-tab" data-bs-toggle="pill" data-bs-target="#advanced-view-pane" type="button" role="tab">
+                <i class="bi bi-table"></i>
+                <span>Advanced Granular Matrix</span>
+            </button>
+        </li>
+    </ul>
     {% endif %}
 
-    <!-- Matrix Toolbar -->
-    <div class="card border-0 shadow-sm mb-4">
-        <div class="card-body p-3 d-flex flex-wrap justify-content-between align-items-center gap-2">
-            <div class="d-flex align-items-center gap-2">
-                <span class="fw-semibold small text-muted text-uppercase me-2">Quick Actions:</span>
-                {% if mode == 'user' %}
-                <button type="button" class="btn btn-sm btn-outline-secondary" onclick="setAllOverrides('INHERIT')">
-                    <i class="bi bi-arrow-repeat me-1"></i> Inherit All
-                </button>
-                <button type="button" class="btn btn-sm btn-outline-success" onclick="setAllOverrides('ALLOW')">
-                    <i class="bi bi-check-all me-1"></i> Grant All (ALLOW)
-                </button>
-                <button type="button" class="btn btn-sm btn-outline-danger" onclick="setAllOverrides('DENY')">
-                    <i class="bi bi-x-octagon me-1"></i> Block All (DENY)
-                </button>
-                {% else %}
-                <button type="button" class="btn btn-sm btn-outline-primary" onclick="setAllCheckboxes(true)">
-                    <i class="bi bi-check-all me-1"></i> Select All
-                </button>
-                <button type="button" class="btn btn-sm btn-outline-secondary" onclick="setAllCheckboxes(false)">
-                    <i class="bi bi-x me-1"></i> Deselect All
-                </button>
-                <button type="button" class="btn btn-sm btn-outline-info" onclick="setOnlyViewCheckboxes()">
-                    <i class="bi bi-eye me-1"></i> View Only (All Modules)
-                </button>
-                {% endif %}
+    <!-- TAB CONTENTS -->
+    <div class="tab-content" id="rbacTabContent">
+
+        {% if mode == 'user' %}
+        <!-- TAB 1: SIMPLE DASHBOARD & SUMMARY VIEW -->
+        <div class="tab-pane fade show active" id="simple-view-pane" role="tabpanel">
+
+            <!-- Presets & Search Toolbar -->
+            <div class="card border-0 shadow-sm mb-4">
+                <div class="card-body p-3 d-flex flex-wrap justify-content-between align-items-center gap-3">
+                    <div class="d-flex flex-wrap align-items-center gap-2">
+                        <span class="fw-bold small text-muted text-uppercase me-1">1-Click Presets:</span>
+                        <button type="button" class="btn btn-sm btn-outline-success fw-semibold" onclick="applyPreset('ALL_VIEW')">
+                            <i class="bi bi-check-all me-1"></i> Allow All Dashboards
+                        </button>
+                        <button type="button" class="btn btn-sm btn-outline-primary fw-semibold" onclick="applyPreset('ANALYTICS_ONLY')">
+                            <i class="bi bi-graph-up me-1"></i> Analytics Only (No Upload/P&L)
+                        </button>
+                        <button type="button" class="btn btn-sm btn-outline-info fw-semibold" onclick="applyPreset('MANAGEMENT_PRESET')">
+                            <i class="bi bi-briefcase me-1"></i> Management (All Dashboards + P&L)
+                        </button>
+                        <button type="button" class="btn btn-sm btn-outline-danger fw-semibold" onclick="applyPreset('BLOCK_ALL')">
+                            <i class="bi bi-slash-circle me-1"></i> Block All
+                        </button>
+                        <button type="button" class="btn btn-sm btn-outline-secondary fw-semibold" onclick="applyPreset('INHERIT_ALL')">
+                            <i class="bi bi-arrow-repeat me-1"></i> Follow Role Defaults
+                        </button>
+                    </div>
+                    <div class="d-flex align-items-center gap-2">
+                        <div class="input-group input-group-sm" style="width: 250px;">
+                            <span class="input-group-text bg-white border-end-0"><i class="bi bi-search text-muted"></i></span>
+                            <input type="text" id="simpleSearchInput" class="form-control border-start-0" placeholder="Search dashboard...">
+                        </div>
+                    </div>
+                </div>
             </div>
-            <div class="d-flex align-items-center gap-2">
-                <input type="text" id="matrixFilterInput" class="form-control form-control-sm" placeholder="Filter module name..." style="width: 220px;">
-            </div>
-        </div>
-    </div>
 
-    <!-- Permissions Matrix Table -->
-    <div class="card border-0 shadow-sm overflow-hidden mb-4">
-        <div class="table-responsive">
-            <table class="table table-hover align-middle mb-0" id="matrixTable">
-                <thead class="table-light">
-                    <tr class="text-muted small text-uppercase">
-                        <th class="ps-4" style="min-width: 250px;">Application Module</th>
-                        <th class="text-center" style="width: {% if mode == 'user' %}140px{% else %}100px{% endif %};">View</th>
-                        <th class="text-center" style="width: {% if mode == 'user' %}140px{% else %}100px{% endif %};">Add</th>
-                        <th class="text-center" style="width: {% if mode == 'user' %}140px{% else %}100px{% endif %};">Edit</th>
-                        <th class="text-center" style="width: {% if mode == 'user' %}140px{% else %}100px{% endif %};">Delete</th>
-                        <th class="text-center" style="width: {% if mode == 'user' %}140px{% else %}110px{% endif %};">Upload</th>
-                        <th class="text-center" style="width: {% if mode == 'user' %}140px{% else %}110px{% endif %};">Export</th>
-                        <th class="text-center pe-4" style="width: {% if mode == 'user' %}140px{% else %}110px{% endif %};">Manage</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    {% regroup matrix_rows by group as grouped_modules %}
-                    {% for group in grouped_modules %}
-                    <!-- Group Header Row -->
-                    <tr class="table-secondary group-row">
-                        <td colspan="8" class="ps-4 py-2">
-                            <div class="d-flex align-items-center justify-content-between">
-                                <span class="fw-bold text-dark text-uppercase small tracking-wide">
-                                    <i class="bi bi-folder2-open me-2 text-primary"></i>{{ group.grouper }}
-                                </span>
-                                {% if mode == 'role' %}
-                                <div class="d-flex gap-2">
-                                    <button type="button" class="btn btn-link btn-sm text-decoration-none p-0 text-muted small" onclick="toggleGroupRow('{{ forloop.counter }}', true)">Select Group</button>
-                                    <span class="text-muted">•</span>
-                                    <button type="button" class="btn btn-link btn-sm text-decoration-none p-0 text-muted small" onclick="toggleGroupRow('{{ forloop.counter }}', false)">Clear</button>
-                                </div>
-                                {% endif %}
+            <!-- Two-Column Layout: Left Cards (8 cols), Right Sidebar Preview (4 cols) -->
+            <div class="row g-4">
+                <!-- Left: Dashboard Cards -->
+                <div class="col-lg-8">
+                    {% regroup matrix_rows by group as simple_groups %}
+                    {% for grp in simple_groups %}
+                    <div class="mb-4 group-block">
+                        <div class="d-flex align-items-center justify-content-between mb-3 pb-2 border-bottom">
+                            <h5 class="fw-bold text-dark mb-0 d-flex align-items-center gap-2">
+                                <i class="bi bi-folder2-open text-primary"></i>
+                                <span>{{ grp.grouper }}</span>
+                            </h5>
+                            <div class="d-flex gap-2">
+                                <button type="button" class="btn btn-link btn-sm text-decoration-none p-0 text-success fw-semibold small" onclick="toggleGroupAccess('{{ grp.grouper|slugify }}', true)">Allow All in Group</button>
+                                <span class="text-muted">•</span>
+                                <button type="button" class="btn btn-link btn-sm text-decoration-none p-0 text-danger fw-semibold small" onclick="toggleGroupAccess('{{ grp.grouper|slugify }}', false)">Block Group</button>
                             </div>
-                        </td>
-                    </tr>
+                        </div>
 
-                    {% for row in group.list %}
-                    <tr class="module-row group-item-{{ forloop.parentloop.counter }}">
-                        <td class="ps-4">
-                            <div class="d-flex align-items-center gap-2">
-                                <i class="bi {{ row.icon }} text-muted fs-5"></i>
-                                <div>
-                                    <div class="fw-bold text-dark module-title">{{ row.name }}</div>
-                                    <div class="text-muted small"><code>{{ row.code }}</code></div>
-                                </div>
-                            </div>
-                        </td>
+                        <div class="d-flex flex-column gap-3">
+                            {% for row in grp.list %}
+                            <div class="card border-0 shadow-sm rounded-3 module-card group-{{ grp.grouper|slugify }} p-3 transition-card" id="card_{{ row.code }}">
+                                <div class="d-flex flex-column flex-md-row justify-content-between align-items-start align-items-md-center gap-3">
+                                    
+                                    <!-- Module Identity & What Summary Is Shown -->
+                                    <div class="d-flex align-items-start gap-3 flex-grow-1">
+                                        <div class="module-icon-box rounded-3 d-flex align-items-center justify-content-center bg-{{ row.badge_color }}-subtle text-{{ row.badge_color }} flex-shrink-0" style="width: 46px; height: 46px; font-size: 1.4rem;">
+                                            <i class="bi {{ row.icon }}"></i>
+                                        </div>
+                                        <div class="flex-grow-1">
+                                            <div class="d-flex align-items-center gap-2 mb-1">
+                                                <h6 class="fw-bold text-dark mb-0 card-module-title">{{ row.name }}</h6>
+                                                <span class="badge bg-{{ row.badge_color }}-subtle text-{{ row.badge_color }} border border-{{ row.badge_color }}-subtle px-2 py-0" style="font-size: 0.72rem;">
+                                                    {{ row.type_badge }}
+                                                </span>
+                                            </div>
+                                            
+                                            <!-- Prominent Summary Box Explaining Exactly What Chetan Sees -->
+                                            <div class="p-2 rounded bg-light border-start border-3 border-{{ row.badge_color }} mt-2" style="font-size: 0.82rem;">
+                                                <div class="text-dark fw-semibold mb-0">
+                                                    <i class="bi bi-info-circle-fill text-{{ row.badge_color }} me-1"></i>
+                                                    <span>Summary Show Hogi:</span>
+                                                    <span class="text-secondary fw-normal ms-1">{{ row.summary_hi }}</span>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
 
-                        {% for act_name, act in row.actions.items %}
-                        <td class="text-center {% if forloop.last %}pe-4{% endif %}">
-                            {% if act.is_allowed %}
-                                {% if mode == 'user' %}
-                                <!-- User 3-state Override Selector -->
-                                <div>
-                                    <select name="{{ act.field_name }}" class="form-select form-select-sm override-select {% if act.current_override == 'ALLOW' %}border-success text-success fw-bold bg-success-subtle{% elif act.current_override == 'DENY' %}border-danger text-danger fw-bold bg-danger-subtle{% endif %}" onchange="updateOverrideStyle(this)" style="font-size: 0.78rem;">
-                                        <option value="INHERIT" {% if act.current_override == 'INHERIT' %}selected{% endif %}>
-                                            INHERIT ({% if act.role_default %}Role:YES{% else %}Role:NO{% endif %})
-                                        </option>
-                                        <option value="ALLOW" {% if act.current_override == 'ALLOW' %}selected{% endif %}>
-                                            ALLOW (Grant)
-                                        </option>
-                                        <option value="DENY" {% if act.current_override == 'DENY' %}selected{% endif %}>
-                                            DENY (Block)
-                                        </option>
-                                    </select>
-                                    <div class="small mt-1" style="font-size: 0.7rem;">
-                                        {% if act.effective_value %}
-                                        <span class="text-success fw-semibold"><i class="bi bi-check-circle-fill me-1"></i>Allowed</span>
-                                        {% else %}
-                                        <span class="text-danger fw-semibold"><i class="bi bi-x-circle-fill me-1"></i>Denied</span>
-                                        {% endif %}
+                                    <!-- Main Access Toggle Button -->
+                                    <div class="d-flex flex-column align-items-end gap-2 flex-shrink-0">
+                                        <div class="btn-group" role="group">
+                                            <button type="button" 
+                                                    class="btn btn-sm toggle-btn-allow {% if row.is_visible %}btn-success active fw-bold text-white shadow-sm{% else %}btn-outline-secondary text-muted{% endif %}"
+                                                    id="btn_allow_{{ row.code }}"
+                                                    onclick="setModuleViewStatus('{{ row.code }}', 'ALLOW')">
+                                                <i class="bi bi-check-circle-fill me-1"></i> SHOW (Allow)
+                                            </button>
+                                            <button type="button" 
+                                                    class="btn btn-sm toggle-btn-deny {% if not row.is_visible %}btn-danger active fw-bold text-white shadow-sm{% else %}btn-outline-secondary text-muted{% endif %}"
+                                                    id="btn_deny_{{ row.code }}"
+                                                    onclick="setModuleViewStatus('{{ row.code }}', 'DENY')">
+                                                <i class="bi bi-x-circle-fill me-1"></i> HIDE (Block)
+                                            </button>
+                                        </div>
+                                        <div class="small" id="status_label_{{ row.code }}" style="font-size: 0.75rem;">
+                                            {% if row.is_visible %}
+                                            <span class="text-success fw-bold"><i class="bi bi-check2"></i> Chetan ko dikhega</span>
+                                            {% else %}
+                                            <span class="text-danger fw-bold"><i class="bi bi-lock-fill"></i> Chetan se hide rahega</span>
+                                            {% endif %}
+                                        </div>
                                     </div>
                                 </div>
-                                {% else %}
-                                <!-- Role Checkbox -->
-                                <div class="form-check d-inline-block">
-                                    <input class="form-check-input perm-checkbox perm-{{ act_name }}" type="checkbox" name="{{ act.field_name }}" {% if act.is_checked %}checked{% endif %}>
+
+                                <!-- Sub-Capabilities (Export, Upload, Edit) shown if supported -->
+                                {% if row.actions.can_export.is_allowed or row.actions.can_upload.is_allowed or row.actions.can_edit.is_allowed %}
+                                <div class="mt-3 pt-2 border-top d-flex flex-wrap align-items-center gap-3 extra-capabilities" id="caps_{{ row.code }}" style="font-size: 0.8rem; {% if not row.is_visible %}opacity: 0.5; pointer-events: none;{% endif %}">
+                                    <span class="text-muted fw-semibold small text-uppercase">Extra Rights:</span>
+                                    
+                                    {% if row.actions.can_export.is_allowed %}
+                                    <label class="form-check form-check-inline mb-0 cursor-pointer">
+                                        <input class="form-check-input cap-check" type="checkbox" id="cap_export_{{ row.code }}" 
+                                               {% if row.actions.can_export.effective_value %}checked{% endif %}
+                                               onchange="setExtraCapability('{{ row.code }}', 'can_export', this.checked)">
+                                        <span class="form-check-label text-dark"><i class="bi bi-download text-primary me-1"></i>Can Export Reports (Excel/PDF)</span>
+                                    </label>
+                                    {% endif %}
+
+                                    {% if row.actions.can_upload.is_allowed %}
+                                    <label class="form-check form-check-inline mb-0 cursor-pointer">
+                                        <input class="form-check-input cap-check" type="checkbox" id="cap_upload_{{ row.code }}"
+                                               {% if row.actions.can_upload.effective_value %}checked{% endif %}
+                                               onchange="setExtraCapability('{{ row.code }}', 'can_upload', this.checked)">
+                                        <span class="form-check-label text-dark"><i class="bi bi-cloud-arrow-up text-success me-1"></i>Can Upload Excel Data</span>
+                                    </label>
+                                    {% endif %}
+
+                                    {% if row.actions.can_edit.is_allowed %}
+                                    <label class="form-check form-check-inline mb-0 cursor-pointer">
+                                        <input class="form-check-input cap-check" type="checkbox" id="cap_edit_{{ row.code }}"
+                                               {% if row.actions.can_edit.effective_value %}checked{% endif %}
+                                               onchange="setExtraCapability('{{ row.code }}', 'can_edit', this.checked)">
+                                        <span class="form-check-label text-dark"><i class="bi bi-pencil-square text-warning me-1"></i>Can Edit Records</span>
+                                    </label>
+                                    {% endif %}
                                 </div>
                                 {% endif %}
-                            {% else %}
-                            <span class="text-muted opacity-50">—</span>
-                            {% endif %}
-                        </td>
-                        {% endfor %}
-                    </tr>
+                            </div>
+                            {% endfor %}
+                        </div>
+                    </div>
                     {% endfor %}
-                    {% endfor %}
-                </tbody>
-            </table>
+                </div>
+
+                <!-- Right: Sticky Live Preview of Chetan's Sidebar Screen -->
+                <div class="col-lg-4">
+                    <div class="card border-0 shadow-sm rounded-3 p-3 sticky-top bg-white border-top border-4 border-info" style="top: 20px;">
+                        <div class="d-flex align-items-center justify-content-between mb-2">
+                            <h6 class="fw-bold text-dark mb-0 d-flex align-items-center gap-2">
+                                <i class="bi bi-phone text-info fs-5"></i>
+                                <span>{{ target_user.get_full_name|default:target_user.username }}'s Screen Preview</span>
+                            </h6>
+                            <span class="badge bg-info-subtle text-info border border-info-subtle px-2 py-1">Live Menu</span>
+                        </div>
+                        <p class="text-muted small mb-3">
+                            Aap left side me jo ON/OFF karenge, login karne ke baad Chetan ke sidebar me wahi dashboards live dikhenge:
+                        </p>
+
+                        <!-- Mock Sidebar Container -->
+                        <div class="mock-sidebar rounded-3 p-2 bg-dark text-white shadow-inner mb-3" style="max-height: 520px; overflow-y: auto;">
+                            <div class="px-2 py-1 text-uppercase text-muted fw-bold" style="font-size: 0.68rem; letter-spacing: 1px;">
+                                <i class="bi bi-grid-3x3-gap-fill me-1"></i> Chetan's Sidebar Navigation
+                            </div>
+                            <hr class="my-1 border-secondary opacity-50">
+
+                            <div class="d-flex flex-column gap-1" id="mockSidebarList">
+                                {% for row in matrix_rows %}
+                                <div class="mock-menu-item d-flex align-items-center justify-content-between px-2 py-2 rounded {% if row.is_visible %}bg-secondary bg-opacity-25 text-white{% else %}text-muted opacity-50 text-decoration-line-through{% endif %}" id="mock_item_{{ row.code }}" style="font-size: 0.8rem;">
+                                    <div class="d-flex align-items-center gap-2 text-truncate">
+                                        <i class="bi {{ row.icon }} {% if row.is_visible %}text-info{% else %}text-muted{% endif %}"></i>
+                                        <span class="text-truncate">{{ row.name }}</span>
+                                    </div>
+                                    <span class="badge {% if row.is_visible %}bg-success text-white{% else %}bg-secondary text-light{% endif %} px-2 py-0 mock-badge" id="mock_badge_{{ row.code }}" style="font-size: 0.65rem;">
+                                        {% if row.is_visible %}Visible{% else %}Hidden{% endif %}
+                                    </span>
+                                </div>
+                                {% endfor %}
+                            </div>
+                        </div>
+
+                        <!-- Quick Summary Box in Preview -->
+                        <div class="p-2 bg-light rounded border small">
+                            <div class="d-flex justify-content-between mb-1">
+                                <span class="text-secondary">Visible Modules:</span>
+                                <strong class="text-success" id="previewVisibleCount">{{ visible_modules_count|default:"0" }}</strong>
+                            </div>
+                            <div class="d-flex justify-content-between mb-1">
+                                <span class="text-secondary">Blocked Modules:</span>
+                                <strong class="text-danger" id="previewHiddenCount">{{ hidden_modules_count|default:"0" }}</strong>
+                            </div>
+                            <div class="d-flex justify-content-between">
+                                <span class="text-secondary">Save Action:</span>
+                                <span class="text-primary fw-semibold">Applies Immediately</span>
+                            </div>
+                        </div>
+
+                        <div class="mt-3">
+                            <button type="submit" form="rbacMatrixForm" class="btn btn-primary w-100 py-2 d-flex align-items-center justify-content-center gap-2 shadow-sm fw-bold">
+                                <i class="bi bi-check-lg fs-5"></i>
+                                <span>Save All Permissions</span>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
         </div>
+        {% endif %}
+
+        <!-- TAB 2: ADVANCED MATRIX TABLE (Always available, default for Role mode) -->
+        <div class="tab-pane fade {% if mode != 'user' %}show active{% endif %}" id="advanced-view-pane" role="tabpanel">
+
+            <!-- Matrix Toolbar -->
+            <div class="card border-0 shadow-sm mb-4">
+                <div class="card-body p-3 d-flex flex-wrap justify-content-between align-items-center gap-2">
+                    <div class="d-flex align-items-center gap-2">
+                        <span class="fw-semibold small text-muted text-uppercase me-2">Quick Actions:</span>
+                        {% if mode == 'user' %}
+                        <button type="button" class="btn btn-sm btn-outline-secondary" onclick="applyPreset('INHERIT_ALL')">
+                            <i class="bi bi-arrow-repeat me-1"></i> Inherit All
+                        </button>
+                        <button type="button" class="btn btn-sm btn-outline-success" onclick="applyPreset('ALL_VIEW')">
+                            <i class="bi bi-check-all me-1"></i> Grant All (ALLOW)
+                        </button>
+                        <button type="button" class="btn btn-sm btn-outline-danger" onclick="applyPreset('BLOCK_ALL')">
+                            <i class="bi bi-x-octagon me-1"></i> Block All (DENY)
+                        </button>
+                        {% else %}
+                        <button type="button" class="btn btn-sm btn-outline-primary" onclick="setAllCheckboxes(true)">
+                            <i class="bi bi-check-all me-1"></i> Select All
+                        </button>
+                        <button type="button" class="btn btn-sm btn-outline-secondary" onclick="setAllCheckboxes(false)">
+                            <i class="bi bi-x me-1"></i> Deselect All
+                        </button>
+                        <button type="button" class="btn btn-sm btn-outline-info" onclick="setOnlyViewCheckboxes()">
+                            <i class="bi bi-eye me-1"></i> View Only (All Modules)
+                        </button>
+                        {% endif %}
+                    </div>
+                    <div class="d-flex align-items-center gap-2">
+                        <input type="text" id="matrixFilterInput" class="form-control form-control-sm" placeholder="Filter module name..." style="width: 220px;">
+                    </div>
+                </div>
+            </div>
+
+            <!-- Permissions Matrix Table -->
+            <div class="card border-0 shadow-sm overflow-hidden mb-4">
+                <div class="table-responsive">
+                    <table class="table table-hover align-middle mb-0" id="matrixTable">
+                        <thead class="table-light">
+                            <tr class="text-muted small text-uppercase">
+                                <th class="ps-4" style="min-width: 260px;">Application Module</th>
+                                <th class="text-center" style="width: {% if mode == 'user' %}140px{% else %}100px{% endif %};">View</th>
+                                <th class="text-center" style="width: {% if mode == 'user' %}140px{% else %}100px{% endif %};">Add</th>
+                                <th class="text-center" style="width: {% if mode == 'user' %}140px{% else %}100px{% endif %};">Edit</th>
+                                <th class="text-center" style="width: {% if mode == 'user' %}140px{% else %}100px{% endif %};">Delete</th>
+                                <th class="text-center" style="width: {% if mode == 'user' %}140px{% else %}110px{% endif %};">Upload</th>
+                                <th class="text-center" style="width: {% if mode == 'user' %}140px{% else %}110px{% endif %};">Export</th>
+                                <th class="text-center pe-4" style="width: {% if mode == 'user' %}140px{% else %}110px{% endif %};">Manage</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% regroup matrix_rows by group as grouped_modules %}
+                            {% for group in grouped_modules %}
+                            <!-- Group Header Row -->
+                            <tr class="table-secondary group-row">
+                                <td colspan="8" class="ps-4 py-2">
+                                    <div class="d-flex align-items-center justify-content-between">
+                                        <span class="fw-bold text-dark text-uppercase small tracking-wide">
+                                            <i class="bi bi-folder2-open me-2 text-primary"></i>{{ group.grouper }}
+                                        </span>
+                                        {% if mode == 'role' %}
+                                        <div class="d-flex gap-2">
+                                            <button type="button" class="btn btn-link btn-sm text-decoration-none p-0 text-muted small" onclick="toggleGroupRow('{{ forloop.counter }}', true)">Select Group</button>
+                                            <span class="text-muted">•</span>
+                                            <button type="button" class="btn btn-link btn-sm text-decoration-none p-0 text-muted small" onclick="toggleGroupRow('{{ forloop.counter }}', false)">Clear</button>
+                                        </div>
+                                        {% endif %}
+                                    </div>
+                                </td>
+                            </tr>
+
+                            {% for row in group.list %}
+                            <tr class="module-row group-item-{{ forloop.parentloop.counter }}">
+                                <td class="ps-4">
+                                    <div class="d-flex align-items-center gap-2">
+                                        <i class="bi {{ row.icon }} text-muted fs-5"></i>
+                                        <div>
+                                            <div class="fw-bold text-dark module-title">{{ row.name }}</div>
+                                            <div class="text-muted small"><code>{{ row.code }}</code></div>
+                                        </div>
+                                    </div>
+                                </td>
+
+                                {% for act_name, act in row.actions.items %}
+                                <td class="text-center {% if forloop.last %}pe-4{% endif %}">
+                                    {% if act.is_allowed %}
+                                        {% if mode == 'user' %}
+                                        <!-- User 3-state Override Selector -->
+                                        <div>
+                                            <select name="{{ act.field_name }}" id="table_{{ act.field_name }}" class="form-select form-select-sm override-select {% if act.current_override == 'ALLOW' %}border-success text-success fw-bold bg-success-subtle{% elif act.current_override == 'DENY' %}border-danger text-danger fw-bold bg-danger-subtle{% endif %}" onchange="onTableOverrideChange(this, '{{ row.code }}', '{{ act_name }}')" style="font-size: 0.78rem;">
+                                                <option value="INHERIT" {% if act.current_override == 'INHERIT' %}selected{% endif %}>
+                                                    INHERIT ({% if act.role_default %}Role:YES{% else %}Role:NO{% endif %})
+                                                </option>
+                                                <option value="ALLOW" {% if act.current_override == 'ALLOW' %}selected{% endif %}>
+                                                    ALLOW (Grant)
+                                                </option>
+                                                <option value="DENY" {% if act.current_override == 'DENY' %}selected{% endif %}>
+                                                    DENY (Block)
+                                                </option>
+                                            </select>
+                                            <div class="small mt-1" style="font-size: 0.7rem;">
+                                                {% if act.effective_value %}
+                                                <span class="text-success fw-semibold"><i class="bi bi-check-circle-fill me-1"></i>Allowed</span>
+                                                {% else %}
+                                                <span class="text-danger fw-semibold"><i class="bi bi-x-circle-fill me-1"></i>Denied</span>
+                                                {% endif %}
+                                            </div>
+                                        </div>
+                                        {% else %}
+                                        <!-- Role Checkbox -->
+                                        <div class="form-check d-inline-block">
+                                            <input class="form-check-input perm-checkbox perm-{{ act_name }}" type="checkbox" name="{{ act.field_name }}" {% if act.is_checked %}checked{% endif %}>
+                                        </div>
+                                        {% endif %}
+                                    {% else %}
+                                    <span class="text-muted opacity-50">—</span>
+                                    {% endif %}
+                                </td>
+                                {% endfor %}
+                            </tr>
+                            {% endfor %}
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
     </div>
 
-    <!-- Sticky Bottom Bar -->
-    <div class="card border-0 shadow p-3 bg-white sticky-bottom rounded-3 d-flex flex-row justify-content-between align-items-center">
+    <!-- Sticky Bottom Save Bar -->
+    <div class="card border-0 shadow p-3 bg-white sticky-bottom rounded-3 d-flex flex-row justify-content-between align-items-center mt-4">
         <div class="text-muted small">
             <i class="bi bi-shield-check text-success me-1"></i> Permissions will apply immediately upon saving.
         </div>
@@ -212,7 +457,7 @@
             <a href="{% url 'core:rbac_dashboard' %}" class="btn btn-outline-secondary px-3">
                 Cancel
             </a>
-            <button type="submit" class="btn btn-primary px-4 d-flex align-items-center gap-2">
+            <button type="submit" class="btn btn-primary px-4 d-flex align-items-center gap-2 shadow-sm fw-bold">
                 <i class="bi bi-check-lg"></i>
                 <span>Save Permissions</span>
             </button>
@@ -221,6 +466,105 @@
 </form>
 
 <script>
+    // Live synchronization between Simple Card toggles and Advanced Table inputs
+    function setModuleViewStatus(modCode, status) {
+        const fieldName = `override_${modCode}_can_view`;
+        const tableSelect = document.getElementById(`table_${fieldName}`);
+        if (tableSelect) {
+            tableSelect.value = status;
+            updateOverrideStyle(tableSelect);
+        }
+
+        const isVisible = (status === 'ALLOW');
+        updateCardUI(modCode, isVisible);
+        updateMockSidebar(modCode, isVisible);
+        recalcCounters();
+    }
+
+    function setExtraCapability(modCode, actName, isChecked) {
+        const fieldName = `override_${modCode}_${actName}`;
+        const tableSelect = document.getElementById(`table_${fieldName}`);
+        if (tableSelect) {
+            tableSelect.value = isChecked ? 'ALLOW' : 'DENY';
+            updateOverrideStyle(tableSelect);
+        }
+    }
+
+    function updateCardUI(modCode, isVisible) {
+        const btnAllow = document.getElementById(`btn_allow_${modCode}`);
+        const btnDeny = document.getElementById(`btn_deny_${modCode}`);
+        const statusLabel = document.getElementById(`status_label_${modCode}`);
+        const capsDiv = document.getElementById(`caps_${modCode}`);
+        const card = document.getElementById(`card_${modCode}`);
+
+        if (isVisible) {
+            if (btnAllow) {
+                btnAllow.className = 'btn btn-sm toggle-btn-allow btn-success active fw-bold text-white shadow-sm';
+            }
+            if (btnDeny) {
+                btnDeny.className = 'btn btn-sm toggle-btn-deny btn-outline-secondary text-muted';
+            }
+            if (statusLabel) {
+                statusLabel.innerHTML = '<span class="text-success fw-bold"><i class="bi bi-check2"></i> Chetan ko dikhega</span>';
+            }
+            if (capsDiv) {
+                capsDiv.style.opacity = '1';
+                capsDiv.style.pointerEvents = 'auto';
+            }
+            if (card) {
+                card.classList.remove('opacity-75');
+            }
+        } else {
+            if (btnAllow) {
+                btnAllow.className = 'btn btn-sm toggle-btn-allow btn-outline-secondary text-muted';
+            }
+            if (btnDeny) {
+                btnDeny.className = 'btn btn-sm toggle-btn-deny btn-danger active fw-bold text-white shadow-sm';
+            }
+            if (statusLabel) {
+                statusLabel.innerHTML = '<span class="text-danger fw-bold"><i class="bi bi-lock-fill"></i> Chetan se hide rahega</span>';
+            }
+            if (capsDiv) {
+                capsDiv.style.opacity = '0.5';
+                capsDiv.style.pointerEvents = 'none';
+            }
+            if (card) {
+                card.classList.add('opacity-75');
+            }
+        }
+    }
+
+    function updateMockSidebar(modCode, isVisible) {
+        const item = document.getElementById(`mock_item_${modCode}`);
+        const badge = document.getElementById(`mock_badge_${modCode}`);
+        if (item) {
+            if (isVisible) {
+                item.className = 'mock-menu-item d-flex align-items-center justify-content-between px-2 py-2 rounded bg-secondary bg-opacity-25 text-white';
+            } else {
+                item.className = 'mock-menu-item d-flex align-items-center justify-content-between px-2 py-2 rounded text-muted opacity-50 text-decoration-line-through';
+            }
+        }
+        if (badge) {
+            if (isVisible) {
+                badge.className = 'badge bg-success text-white px-2 py-0 mock-badge';
+                badge.innerText = 'Visible';
+            } else {
+                badge.className = 'badge bg-secondary text-light px-2 py-0 mock-badge';
+                badge.innerText = 'Hidden';
+            }
+        }
+    }
+
+    function onTableOverrideChange(sel, modCode, actName) {
+        updateOverrideStyle(sel);
+        if (actName === 'can_view') {
+            const isVisible = (sel.value === 'ALLOW');
+            updateCardUI(modCode, isVisible);
+            updateMockSidebar(modCode, isVisible);
+            recalcCounters();
+        }
+    }
+
     function updateOverrideStyle(sel) {
         sel.classList.remove('border-success', 'text-success', 'bg-success-subtle', 'border-danger', 'text-danger', 'bg-danger-subtle', 'fw-bold');
         if (sel.value === 'ALLOW') {
@@ -230,10 +574,72 @@
         }
     }
 
-    function setAllOverrides(val) {
-        document.querySelectorAll('.override-select').forEach(sel => {
-            sel.value = val;
-            updateOverrideStyle(sel);
+    function recalcCounters() {
+        let visible = 0;
+        let total = 0;
+        document.querySelectorAll('.mock-menu-item').forEach(item => {
+            total++;
+            if (!item.classList.contains('text-decoration-line-through')) {
+                visible++;
+            }
+        });
+        const hidden = total - visible;
+
+        const summaryVisible = document.getElementById('summaryVisibleBadge');
+        const summaryHidden = document.getElementById('summaryHiddenBadge');
+        const previewVisible = document.getElementById('previewVisibleCount');
+        const previewHidden = document.getElementById('previewHiddenCount');
+
+        if (summaryVisible) summaryVisible.innerText = visible;
+        if (summaryHidden) summaryHidden.innerText = hidden;
+        if (previewVisible) previewVisible.innerText = visible;
+        if (previewHidden) previewHidden.innerText = hidden;
+    }
+
+    function applyPreset(presetType) {
+        const allModules = ['dashboard', 'upload', 'history', 'rm', 'monthly', 'story', 'payment', 'category', 'spoc', 'dealers', 'pnl', 'quality', 'category_mapping', 'transactions', 'export', 'audit', 'settings', 'rbac'];
+        
+        if (presetType === 'ALL_VIEW') {
+            allModules.forEach(mod => {
+                setModuleViewStatus(mod, 'ALLOW');
+            });
+        } else if (presetType === 'BLOCK_ALL') {
+            allModules.forEach(mod => {
+                setModuleViewStatus(mod, 'DENY');
+            });
+        } else if (presetType === 'ANALYTICS_ONLY') {
+            const allowed = ['dashboard', 'rm', 'monthly', 'story', 'payment', 'category', 'spoc', 'dealers', 'transactions', 'export'];
+            allModules.forEach(mod => {
+                if (allowed.includes(mod)) {
+                    setModuleViewStatus(mod, 'ALLOW');
+                } else {
+                    setModuleViewStatus(mod, 'DENY');
+                }
+            });
+        } else if (presetType === 'MANAGEMENT_PRESET') {
+            const allowed = ['dashboard', 'rm', 'monthly', 'story', 'payment', 'category', 'spoc', 'dealers', 'pnl', 'transactions', 'export'];
+            allModules.forEach(mod => {
+                if (allowed.includes(mod)) {
+                    setModuleViewStatus(mod, 'ALLOW');
+                } else {
+                    setModuleViewStatus(mod, 'DENY');
+                }
+            });
+        } else if (presetType === 'INHERIT_ALL') {
+            document.querySelectorAll('.override-select').forEach(sel => {
+                sel.value = 'INHERIT';
+                updateOverrideStyle(sel);
+            });
+            // Re-sync with role defaults
+            location.reload();
+        }
+    }
+
+    function toggleGroupAccess(groupSlug, allowState) {
+        const val = allowState ? 'ALLOW' : 'DENY';
+        document.querySelectorAll('.group-' + groupSlug).forEach(card => {
+            const modCode = card.id.replace('card_', '');
+            setModuleViewStatus(modCode, val);
         });
     }
 
@@ -258,13 +664,37 @@
         });
     }
 
-    // Filter module rows
+    // Module search in simple view
+    document.getElementById('simpleSearchInput')?.addEventListener('keyup', function() {
+        const query = this.value.toLowerCase();
+        document.querySelectorAll('.module-card').forEach(card => {
+            const title = card.querySelector('.card-module-title')?.innerText.toLowerCase() || '';
+            const desc = card.innerText.toLowerCase();
+            card.style.display = (title.includes(query) || desc.includes(query)) ? '' : 'none';
+        });
+    });
+
+    // Module search in advanced matrix table
     document.getElementById('matrixFilterInput')?.addEventListener('keyup', function() {
         const query = this.value.toLowerCase();
         document.querySelectorAll('#matrixTable tbody tr.module-row').forEach(row => {
-            const title = row.querySelector('.module-title').innerText.toLowerCase();
+            const title = row.querySelector('.module-title')?.innerText.toLowerCase() || '';
             row.style.display = title.includes(query) ? '' : 'none';
         });
     });
 </script>
+
+<style>
+    .transition-card {
+        transition: all 0.2s ease-in-out;
+        border: 1px solid rgba(0,0,0,0.06) !important;
+    }
+    .transition-card:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 4px 12px rgba(0,0,0,0.08) !important;
+    }
+    .cursor-pointer {
+        cursor: pointer;
+    }
+</style>
 {% endblock %}

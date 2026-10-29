@@ -262,3 +262,133 @@ DEFAULT_ROLE_TEMPLATES = {
         'modules': {}
     }
 }
+
+MODULE_SUMMARY_MAP = {
+    'dashboard': {
+        'title': 'Executive Dashboard',
+        'summary_hi': 'Total Billing Revenue, 12 Core KPIs, Monthly Growth Trends, Target vs Achievement %',
+        'summary_en': 'Total Billing Revenue, 12 Core KPIs, Monthly Growth Trends, Target vs Achievement %',
+        'type': 'Executive Dashboard',
+        'badge_color': 'primary',
+    },
+    'rm': {
+        'title': 'RM Performance',
+        'summary_hi': 'Regional Managers (RM) ki Sales, Targets vs Achievement, Ticket Size aur Rankings',
+        'summary_en': 'Regional Managers Sales, Targets vs Achievement, Ticket Size and Rankings',
+        'type': 'Sales Analytics',
+        'badge_color': 'info',
+    },
+    'monthly': {
+        'title': 'Monthly Billing',
+        'summary_hi': 'Month-wise Billing Trends, Month-over-Month Growth, Heatmaps aur Channel Mix',
+        'summary_en': 'Month-wise Billing Trends, Month-over-Month Growth, Heatmaps and Channel Mix',
+        'type': 'Billing Analytics',
+        'badge_color': 'info',
+    },
+    'story': {
+        'title': 'STORY Analysis',
+        'summary_hi': 'STORY Division Margins, Product Group Yields, Positive vs Negative Margin Exceptions',
+        'summary_en': 'STORY Division Margins, Product Group Yields, Positive vs Negative Margin Exceptions',
+        'type': 'Margin Analytics',
+        'badge_color': 'info',
+    },
+    'payment': {
+        'title': 'Payment Reconcile',
+        'summary_hi': 'Invoiced vs Realized Collections, Pending Dealer Balances aur Payment Status',
+        'summary_en': 'Invoiced vs Realized Collections, Pending Dealer Balances and Payment Status',
+        'type': 'Financial Audit',
+        'badge_color': 'warning',
+    },
+    'category': {
+        'title': 'Categories',
+        'summary_hi': 'Product Category Revenue Share, Category Group Mix aur Category Margins',
+        'summary_en': 'Product Category Revenue Share, Category Group Mix and Category Margins',
+        'type': 'Category Analytics',
+        'badge_color': 'info',
+    },
+    'spoc': {
+        'title': 'Payment SPOC',
+        'summary_hi': 'Payment Coordinator (SPOC) Recovery Tracking, Outstanding Balance aur Workload',
+        'summary_en': 'Payment Coordinator (SPOC) Recovery Tracking, Outstanding Balance and Workload',
+        'type': 'Recovery Tracking',
+        'badge_color': 'warning',
+    },
+    'dealers': {
+        'title': 'Dealers & Firms',
+        'summary_hi': 'Top Dealer Billing Rankings, Dealer Contribution, Zero & Negative Margin Firms',
+        'summary_en': 'Top Dealer Billing Rankings, Dealer Contribution, Zero & Negative Margin Firms',
+        'type': 'Dealer Analytics',
+        'badge_color': 'info',
+    },
+    'pnl': {
+        'title': 'Profit & Loss (P&L)',
+        'summary_hi': 'Financial P&L Statements, Gross Revenue vs Product Cost vs Net Profit Margins Waterfall',
+        'summary_en': 'Financial P&L Statements, Gross Revenue vs Product Cost vs Net Profit Margins Waterfall',
+        'type': 'Financial P&L',
+        'badge_color': 'danger',
+    },
+    'upload': {
+        'title': 'Upload Excel',
+        'summary_hi': 'New Monthly Billing Excel Sheets Upload Karna aur System Me Sync Karna',
+        'summary_en': 'Upload New Monthly Billing Excel Sheets and Sync to System Database',
+        'type': 'Data Pipeline',
+        'badge_color': 'success',
+    },
+    'history': {
+        'title': 'Import History',
+        'summary_hi': 'Pichli Upload Ki Gayi Files Ki History, Batch Logs, Row Counts aur Variances',
+        'summary_en': 'Past Uploaded Files History, Batch Logs, Row Counts and Variances',
+        'type': 'Audit Logs',
+        'badge_color': 'secondary',
+    },
+    'quality': {
+        'title': 'Data Quality',
+        'summary_hi': 'Data Validation Flags, Missing Records, Duplicate Bills aur Review Exceptions',
+        'summary_en': 'Data Validation Flags, Missing Records, Duplicate Bills and Review Exceptions',
+        'type': 'Data Quality',
+        'badge_color': 'warning',
+    },
+    'category_mapping': {
+        'title': 'Category Mapping',
+        'summary_hi': 'Raw Category Texts Ko Standard Havells Experience Categories Me Map Karna',
+        'summary_en': 'Normalize Raw Category Texts to Standard Havells Categories',
+        'type': 'Data Quality',
+        'badge_color': 'secondary',
+    },
+    'transactions': {
+        'title': 'Transaction Explorer',
+        'summary_hi': 'Complete Billing Transactions Ledger, Line-by-Line Invoices aur Search/Filter',
+        'summary_en': 'Complete Billing Transactions Ledger, Line-by-Line Invoices and Search/Filter',
+        'type': 'Ledger Explorer',
+        'badge_color': 'dark',
+    },
+    'export': {
+        'title': 'Export & MIS Reports',
+        'summary_hi': 'Stylized Multi-Tab Excel MIS Reports Download Karna (Executive, RM, Monthly, STORY)',
+        'summary_en': 'Download Stylized Multi-Tab Excel MIS Reports (Executive, RM, Monthly, STORY)',
+        'type': 'MIS Export Centre',
+        'badge_color': 'success',
+    },
+    'audit': {
+        'title': 'Audit Trail',
+        'summary_hi': 'User Activity Logs, Login History, File Uploads, Record Edits aur Permission Changes',
+        'summary_en': 'User Activity Logs, Login History, File Uploads, Record Edits and Permission Changes',
+        'type': 'System Security',
+        'badge_color': 'secondary',
+    },
+    'settings': {
+        'title': 'Settings & Definitions',
+        'summary_hi': 'Fiscal Year Definitions, Target Thresholds aur System Constants Config',
+        'summary_en': 'Fiscal Year Definitions, Target Thresholds and System Constants Config',
+        'type': 'System Settings',
+        'badge_color': 'secondary',
+    },
+    'rbac': {
+        'title': 'User & Role Access Control',
+        'summary_hi': 'User Accounts Banana, Roles Assign Karna aur Access Permissions Matrix Set Karna',
+        'summary_en': 'Manage User Accounts, Assign Roles and Configure Permission Matrices',
+        'type': 'Security Admin',
+        'badge_color': 'danger',
+    },
+}
+

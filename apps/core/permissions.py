@@ -37,6 +37,9 @@ def get_user_effective_permissions(user, request=None):
 
     # 1. Fetch registered modules from database or fallback to constants
     try:
+        if AppModule.objects.filter(is_active=True).count() < len(AVAILABLE_MODULES):
+            from apps.core.seeder import ensure_rbac_seeded
+            ensure_rbac_seeded()
         modules = list(AppModule.objects.filter(is_active=True).order_by('order'))
     except Exception:
         modules = []

@@ -87,6 +87,10 @@ class RoleAdmin(admin.ModelAdmin):
 
     def role_matrix_view(self, request, role_id):
         role = get_object_or_404(Role, id=role_id)
+        from apps.core.constants import AVAILABLE_MODULES
+        if AppModule.objects.filter(is_active=True).count() < len(AVAILABLE_MODULES):
+            from apps.core.seeder import ensure_rbac_seeded
+            ensure_rbac_seeded()
         modules = list(AppModule.objects.filter(is_active=True).order_by('order'))
         action_names = ['can_view', 'can_add', 'can_edit', 'can_delete', 'can_upload', 'can_export', 'can_manage']
 
@@ -314,6 +318,10 @@ class CustomUserAdmin(BaseUserAdmin):
         target_user = get_object_or_404(User.objects.select_related('profile'), id=user_id)
         profile, _ = UserProfile.objects.get_or_create(user=target_user)
         all_roles = Role.objects.all().order_by('name')
+        from apps.core.constants import AVAILABLE_MODULES
+        if AppModule.objects.filter(is_active=True).count() < len(AVAILABLE_MODULES):
+            from apps.core.seeder import ensure_rbac_seeded
+            ensure_rbac_seeded()
         modules = list(AppModule.objects.filter(is_active=True).order_by('order'))
         action_names = ['can_view', 'can_add', 'can_edit', 'can_delete', 'can_upload', 'can_export', 'can_manage']
 

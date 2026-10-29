@@ -305,6 +305,9 @@ def rbac_user_permissions_view(request, user_id):
     target_user = get_object_or_404(User.objects.select_related('profile', 'profile__role'), id=user_id)
     profile, _ = UserProfile.objects.get_or_create(user=target_user)
     all_roles = Role.objects.all().order_by('name')
+    if AppModule.objects.filter(is_active=True).count() < len(AVAILABLE_MODULES):
+        from apps.core.seeder import ensure_rbac_seeded
+        ensure_rbac_seeded()
     modules = list(AppModule.objects.filter(is_active=True).order_by('order'))
     action_fields = ['can_view', 'can_add', 'can_edit', 'can_delete', 'can_upload', 'can_export', 'can_manage']
 
@@ -437,6 +440,9 @@ def rbac_role_permissions_view(request, role_id):
     Matrix UI to configure permissions for a Role template.
     """
     role = get_object_or_404(Role, id=role_id)
+    if AppModule.objects.filter(is_active=True).count() < len(AVAILABLE_MODULES):
+        from apps.core.seeder import ensure_rbac_seeded
+        ensure_rbac_seeded()
     modules = list(AppModule.objects.filter(is_active=True).order_by('order'))
     action_fields = ['can_view', 'can_add', 'can_edit', 'can_delete', 'can_upload', 'can_export', 'can_manage']
 

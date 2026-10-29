@@ -1,6 +1,8 @@
+from django import forms
 from django.contrib import admin
 from django.contrib import messages
 from django.contrib.auth.admin import UserAdmin as BaseUserAdmin
+from django.contrib.auth.forms import UserCreationForm, UserChangeForm
 from django.contrib.auth.models import User
 from django.urls import path, reverse
 from django.utils.html import format_html
@@ -15,22 +17,6 @@ from apps.core.permissions import get_user_effective_permissions, clear_user_per
 # ==========================================
 # INLINES
 # ==========================================
-
-class UserProfileInline(admin.StackedInline):
-    model = UserProfile
-    can_delete = False
-    verbose_name_plural = 'Profile & RBAC Role'
-    fk_name = 'user'
-    extra = 0
-    fields = ('role', 'department', 'phone')
-
-
-class RolePermissionInline(admin.TabularInline):
-    model = RolePermission
-    extra = 0
-    fields = ('module', 'can_view', 'can_add', 'can_edit', 'can_delete', 'can_upload', 'can_export', 'can_manage')
-    autocomplete_fields = ('module',)
-
 
 class UserPermissionOverrideInline(admin.TabularInline):
     model = UserPermissionOverride
@@ -62,16 +48,35 @@ class RoleAdmin(admin.ModelAdmin):
     list_display = ('name', 'code', 'is_system_role', 'user_count', 'permissions_matrix_link')
     list_filter = ('is_system_role',)
     search_fields = ('name', 'code', 'description')
-    inlines = [RolePermissionInline]
+    readonly_fields = ('matrix_shortcut', 'user_count')
+    fields = ('matrix_shortcut', 'name', 'code', 'description', 'is_system_role', 'user_count')
 
     def user_count(self, obj):
-        return obj.users.count()
+        count = obj.users.count()
+        return format_html('<strong>{}</strong> user(s)', count)
     user_count.short_description = 'Assigned Users'
 
     def permissions_matrix_link(self, obj):
         url = reverse('admin:core_role_matrix', args=[obj.id])
-        return format_html('<a class="button" style="background:#417690; color:#fff; font-weight:600;" href="{}">Configure Matrix</a>', url)
+        return format_html(
+            '<a class="button" style="background:#28a745; color:#fff; font-weight:bold; padding:4px 12px; border-radius:4px; text-decoration:none;" href="{}">&#x2714; Configure Matrix</a>', 
+            url
+        )
     permissions_matrix_link.short_description = 'Permissions Matrix'
+
+    def matrix_shortcut(self, obj):
+        if obj and obj.pk:
+            url = reverse('admin:core_role_matrix', args=[obj.id])
+            return format_html(
+                '<div style="background:#eafaf1; border:2px solid #28a745; border-radius:6px; padding:12px 16px; margin-bottom:12px; max-width:700px;">'
+                '<div style="font-size:1.05rem; font-weight:bold; color:#155724; margin-bottom:4px;">Configure Default Permissions Matrix for {}</div>'
+                '<div style="color:#333; font-size:0.85rem; margin-bottom:10px;">Click below to open the dynamic module permission matrix. All users assigned this role inherit these permissions unless individually overridden.</div>'
+                '<a class="button" style="background:#28a745; color:#fff; font-weight:bold; padding:8px 20px; font-size:0.95rem; text-decoration:none; border-radius:4px; display:inline-block;" href="{}">&#x2699; Open Role Permissions Matrix</a>'
+                '</div>',
+                obj.name, url
+            )
+        return "Save role first to configure permissions matrix."
+    matrix_shortcut.short_description = "Role Permissions Matrix"
 
     def get_urls(self):
         urls = super().get_urls()
@@ -153,22 +158,150 @@ class RoleAdmin(admin.ModelAdmin):
 
 
 # ==========================================
+# CUSTOM USER FORMS WITH DIRECT ROLE SELECT
+# ==========================================
+
+class CustomUserCreationForm(UserCreationForm):
+    role = forms.ModelChoiceField(
+        queryset=Role.objects.all(),
+        required=True,
+        empty_label="-- Select RBAC Role --",
+        help_text="Select one of the 5 predefined roles. Default permissions will automatically apply upon creation.",
+    )
+    department = forms.CharField(required=False, max_length=100, help_text="Optional department name")
+    phone = forms.CharField(required=False, max_length=20, help_text="Optional contact number")
+
+    class Meta(UserCreationForm.Meta):
+        model = User
+        fields = ('username', 'role', 'department', 'phone')
+
+    def save(self, commit=True):
+        user = super().save(commit=commit)
+        role = self.cleaned_data.get('role')
+        dept = self.cleaned_data.get('department', '')
+        phone = self.cleaned_data.get('phone', '')
+
+        if commit:
+            profile, _ = UserProfile.objects.get_or_create(user=user)
+            profile.role = role
+            profile.department = dept
+            profile.phone = phone
+            profile.save()
+
+            if role and role.code == 'SUPER_ADMIN':
+                user.is_superuser = True
+                user.is_staff = True
+                user.save()
+        return user
+
+
+class CustomUserChangeForm(UserChangeForm):
+    role = forms.ModelChoiceField(
+        queryset=Role.objects.all(),
+        required=False,
+        empty_label="-- Select RBAC Role --",
+        help_text="Select one of the 5 predefined roles. User inherits role default permissions unless individually overridden.",
+    )
+    department = forms.CharField(required=False, max_length=100)
+    phone = forms.CharField(required=False, max_length=20)
+
+    class Meta(UserChangeForm.Meta):
+        model = User
+        fields = '__all__'
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        if self.instance and self.instance.pk:
+            profile = getattr(self.instance, 'profile', None)
+            if profile:
+                self.fields['role'].initial = profile.role
+                self.fields['department'].initial = profile.department
+                self.fields['phone'].initial = profile.phone
+
+    def save(self, commit=True):
+        user = super().save(commit=commit)
+        role = self.cleaned_data.get('role')
+        dept = self.cleaned_data.get('department', '')
+        phone = self.cleaned_data.get('phone', '')
+
+        if commit:
+            profile, _ = UserProfile.objects.get_or_create(user=user)
+            profile.role = role
+            profile.department = dept
+            profile.phone = phone
+            profile.save()
+
+            if role and role.code == 'SUPER_ADMIN':
+                user.is_superuser = True
+                user.is_staff = True
+                user.save()
+        return user
+
+
+# ==========================================
 # CUSTOM USER ADMIN WITH DYNAMIC OVERRIDES
 # ==========================================
 
 class CustomUserAdmin(BaseUserAdmin):
-    inlines = (UserProfileInline, UserPermissionOverrideInline)
+    form = CustomUserChangeForm
+    add_form = CustomUserCreationForm
+
     list_display = ('username', 'email', 'first_name', 'last_name', 'get_role', 'is_active', 'is_superuser', 'permissions_matrix_link')
     list_filter = ('is_active', 'is_staff', 'is_superuser', 'profile__role')
 
+    fieldsets = (
+        ("Account Credentials", {"fields": ("username", "password")}),
+        ("RBAC Role & Profile Assignment", {"fields": ("role", "overrides_matrix_shortcut", "department", "phone")}),
+        ("Personal Information", {"fields": ("first_name", "last_name", "email")}),
+        ("Account Status & System Flags", {"fields": ("is_active", "is_staff", "is_superuser")}),
+        ("Important Dates", {"fields": ("last_login", "date_joined"), "classes": ("collapse",)}),
+    )
+
+    add_fieldsets = (
+        (None, {
+            "classes": ("wide",),
+            "fields": ("username", "role", "password1", "password2", "department", "phone"),
+        }),
+    )
+
+    readonly_fields = ('overrides_matrix_shortcut',)
+
     def get_role(self, obj):
-        return obj.profile.role.name if hasattr(obj, 'profile') and obj.profile.role else ('Super Admin' if obj.is_superuser else 'No Role')
+        role_name = obj.profile.role.name if hasattr(obj, 'profile') and obj.profile.role else ('Super Admin' if obj.is_superuser else 'No Role')
+        color = '#205067'
+        if role_name == 'Super Admin':
+            color = '#b7791f'
+        elif role_name == 'Management':
+            color = '#2b6cb0'
+        elif role_name == 'MIS Executive':
+            color = '#2f855a'
+        elif role_name == 'Analyst':
+            color = '#4c51bf'
+        return format_html('<span style="background:{}; color:#fff; font-weight:600; padding:3px 8px; border-radius:4px; font-size:0.8rem;">{}</span>', color, role_name)
     get_role.short_description = 'RBAC Role'
 
     def permissions_matrix_link(self, obj):
         url = reverse('admin:core_user_matrix', args=[obj.id])
-        return format_html('<a class="button" style="background:#205067; color:#fff; font-weight:600;" href="{}">Overrides Matrix</a>', url)
+        return format_html(
+            '<a class="button" style="background:#205067; color:#fff; font-weight:600; padding:4px 10px; border-radius:4px; text-decoration:none;" href="{}">&#x2699; Overrides Matrix</a>', 
+            url
+        )
     permissions_matrix_link.short_description = 'Individual Overrides'
+
+    def overrides_matrix_shortcut(self, obj):
+        if obj and obj.pk:
+            url = reverse('admin:core_user_matrix', args=[obj.id])
+            role_name = obj.profile.role.name if hasattr(obj, 'profile') and obj.profile.role else 'No Role'
+            return format_html(
+                '<div style="background:#eef6f9; border:2px solid #205067; border-radius:6px; padding:12px 16px; margin:4px 0 10px 0; max-width:700px;">'
+                '<div style="font-size:1rem; font-weight:bold; color:#205067; margin-bottom:4px;">Current Role: {}</div>'
+                '<div style="color:#444; font-size:0.85rem; margin-bottom:10px;">Want to grant additional permissions or explicitly deny inherited permissions for this specific user?</div>'
+                '<a class="button" style="background:#205067; color:#fff; font-weight:bold; padding:8px 18px; font-size:0.95rem; text-decoration:none; border-radius:4px; display:inline-block;" href="{}">&#x2699; Open Individual Overrides Matrix (ALLOW / DENY)</a>'
+                '</div>',
+                role_name, url
+            )
+        return "Save user first to configure individual permission overrides."
+    overrides_matrix_shortcut.short_description = "Dynamic Overrides Matrix"
 
     def get_urls(self):
         urls = super().get_urls()
@@ -262,7 +395,6 @@ class CustomUserAdmin(BaseUserAdmin):
             ov.module.code: ov for ov in UserPermissionOverride.objects.filter(user=target_user).select_related('module')
         }
 
-        # Calculate effective permissions map
         effective_map = get_user_effective_permissions(target_user)
 
         matrix_rows = []
@@ -278,17 +410,19 @@ class CustomUserAdmin(BaseUserAdmin):
                 is_allowed = short_act in allowed
 
                 # Role default
-                role_def = getattr(rp, act, False) if rp else (profile.role and profile.role.code == 'SUPER_ADMIN')
-                # Override value
-                current_ov = getattr(ov, f"{short_act}_override", 'INHERIT') if ov else 'INHERIT'
-                # Effective value
+                role_default_val = getattr(rp, act, False) if rp else (profile.role and profile.role.code == 'SUPER_ADMIN')
+
+                # User override
+                override_val = getattr(ov, f"{short_act}_override", 'INHERIT') if ov else 'INHERIT'
+
+                # Effective final status
                 effective_val = eff_mod.get(act, False)
 
                 row_actions[act] = {
                     'is_allowed': is_allowed,
-                    'role_default': role_def,
-                    'current_override': current_ov,
-                    'effective_value': effective_val,
+                    'role_default': role_default_val,
+                    'override_val': override_val,
+                    'effective_val': effective_val,
                     'field_name': f"override_{mod.code}_{act}",
                 }
 
@@ -319,27 +453,6 @@ admin.site.register(User, CustomUserAdmin)
 # ==========================================
 # OTHER CORE ADMIN REGISTRATIONS
 # ==========================================
-
-@admin.register(RolePermission)
-class RolePermissionAdmin(admin.ModelAdmin):
-    list_display = ('role', 'module', 'can_view', 'can_add', 'can_edit', 'can_delete', 'can_upload', 'can_export', 'can_manage')
-    list_filter = ('role', 'module__group', 'can_view', 'can_upload', 'can_export')
-    search_fields = ('role__name', 'module__name', 'module__code')
-
-
-@admin.register(UserPermissionOverride)
-class UserPermissionOverrideAdmin(admin.ModelAdmin):
-    list_display = ('user', 'module', 'view_override', 'add_override', 'edit_override', 'upload_override', 'export_override', 'manage_override')
-    list_filter = ('view_override', 'upload_override', 'export_override', 'module__group')
-    search_fields = ('user__username', 'module__name', 'module__code')
-
-
-@admin.register(UserProfile)
-class UserProfileAdmin(admin.ModelAdmin):
-    list_display = ('user', 'role', 'department', 'phone')
-    list_filter = ('role',)
-    search_fields = ('user__username', 'department', 'phone')
-
 
 @admin.register(AuditLog)
 class AuditLogAdmin(admin.ModelAdmin):

@@ -54,8 +54,8 @@ class Role(models.Model):
 
     class Meta:
         ordering = ['name']
-        verbose_name = 'Role'
-        verbose_name_plural = 'Roles'
+        verbose_name = 'Role & Permissions'
+        verbose_name_plural = 'Roles & Permissions (RBAC Matrix)'
 
     def __str__(self):
         return self.name

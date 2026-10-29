@@ -39,7 +39,7 @@ class RoleAdmin(admin.ModelAdmin):
     inlines = [ModulePermissionInline]
 
     def user_count(self, obj):
-        return obj.userprofile_set.count()
+        return obj.users.count()
     user_count.short_description = 'Assigned Users'
 
 @admin.register(UserProfile)

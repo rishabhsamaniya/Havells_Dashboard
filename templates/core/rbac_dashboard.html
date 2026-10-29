@@ -236,7 +236,7 @@
                                 {% endif %}
                             </td>
                             <td>
-                                <span class="badge bg-light text-dark border px-2 py-1">{{ r.userprofile_set.count }} user{{ r.userprofile_set.count|pluralize }}</span>
+                                <span class="badge bg-light text-dark border px-2 py-1">{{ r.users.count }} user{{ r.users.count|pluralize }}</span>
                             </td>
                             <td class="text-end pe-4">
                                 <a href="{% url 'core:rbac_role_permissions' r.id %}" class="btn btn-sm btn-outline-primary">
